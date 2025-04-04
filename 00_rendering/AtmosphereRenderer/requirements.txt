@@ -1,0 +1,10 @@
+numpy
+scipy
+matplotlib
+tqdm
+Pillow
+h5py
+scikit-learn
+pyvista
+vtk
+```
