@@ -1,0 +1,7 @@
+h5py==3.13.0
+matplotlib==3.10.0
+mayavi==4.8.2
+numpy==2.2.3
+pandas==2.2.3
+scikit_learn==1.6.1
+scipy==1.15.1

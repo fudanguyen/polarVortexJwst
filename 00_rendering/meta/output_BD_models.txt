@@ -1,0 +1,63 @@
+modelname = 'BD_B'
+#####################################################################
+Fband= 1.0
+Fambient = 0.55
+# Fpolar = 0.35
+### periods
+Pband = 3.0
+Ppol = 10.0
+### Modulation config
+# modu_config = 'all_sinusoid'
+### Lookup Map Spectra Dict Key
+speckey = {'A':0.25, 'B':0.58, 'P':0.75}
+##################################
+frame_no = 100
+t0, t1 = 0,15
+config = [[45, 30, Fband, 'B', 10, Pband/2],
+         [20, 5, Fband, 'B', 60, Pband], 
+         [89, 65, Fband, 'P', -30, Ppol]]
+##################################
+modelname = 'BD_C'
+frame_no = 100
+t0, t1 = 0,15
+config = [[89, 70, Fband, 'P', -30, Ppol],
+          [45, 35., Fband, 'B', 10, Pband/2],
+          [22, 15, Fband, 'B', 150, Pband], 
+          [-10, -20, Fband, 'B', -26, Pband/2],
+          [-30, -40, Fband, 'B', 135, Pband],
+          [-72, -89, Fband, 'P', 15, Ppol]]
+##################################
+modelname = 'BD_D'
+frame_no = 2
+t0, t1 = 0,1
+config = [[89, 77, Fband, 'P', -30, Ppol],
+          [72, 65, Fband, 'P', -70, Ppol],
+          [53, 46., Fband, 'B', 100, Pband/2],
+          [35, 27., Fband, 'B', -10, Pband/2],
+          [22, 15, Fband, 'B', 150, Pband],
+          [8, 0, Fband, 'B', -50, Pband],
+          [-10, -18, Fband, 'B', 56, Pband],
+          [-25, -34, Fband, 'B', 16, Pband],
+          [-40, -48, Fband, 'B', 85, Pband/2],
+          [-54, -60, Fband, 'B', -35, Pband/2],
+          [-68, -75, Fband, 'P', 5, Ppol],
+          [-77, -89, Fband, 'P', 15, Ppol]]     
+#####################################################################
+Fband= 1.0
+Fambient = 0.55
+# Fpolar = 0.35
+### periods
+Pband = 5.0
+Ppol = 60.0
+### Modulation config
+# modu_config = 'sinusoidBand_polarCap'
+### Lookup Map Spectra Dict Key
+speckey = {'A':0.25, 'B':0.58, 'P':0.75}
+##################################
+modelname = 'BD_E'
+config = [[90, 65, Fband, 'P', -30, Ppol],
+          [45, 35., Fband, 'B', 10, Pband/2],
+          [22, 15, Fband, 'B', 150, Pband], 
+          [-10, -20, Fband, 'B', -26, Pband/2],
+          [-30, -40, Fband, 'B', 135, Pband],
+          [-65, -90, Fband, 'P', 15, Ppol]]
