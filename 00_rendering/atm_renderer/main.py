@@ -85,3 +85,7 @@ class AtmosphericConfig:
         for entry in self.config:
             if len(entry) != len(required_keys):
                 raise ValueError("Invalid config entry")
+# ==============================================================================
+# Core atmospheric simulation logic
+# =============================================================================
+# class AtmosphericModel:
