@@ -11,21 +11,16 @@ Upgrade from AtmosphereGenerator.py:
 # IMPORT LIBRARIES
 import h5py
 import pickle
-# from mayavi import mlab
+import os
 # =============================================================================
-# Enable vtk-m GPU-backend 
+# Enable vtk GPU-backend 
 import vtk
-# Create a render window
-render_window = vtk.vtkRenderWindow()
-# Check the rendering backend, check GPU support
-from vtkmodules.vtkRenderingOpenGL2 import vtkOpenGLRenderWindow
-
-render_window = vtkOpenGLRenderWindow()
-print("GPU Vendor:", render_window.GetVendor())
-print("GPU Renderer:", render_window.GetRenderer())
-print("GPU Version:", render_window.GetVersion())
+# Set debug flags for VTK/OpenGL
+os.environ["VTK_DEBUG_OPENGL"] = "1"
+os.environ["VTK_REPORT_OPENGL_ERRORS"] = "1"
+print("VTK Version:", vtk.vtkVersion.GetVTKVersion())
+print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 # =============================================================================
-
 import pyvista as pv
 from tqdm import tqdm
 import numpy as np
@@ -34,16 +29,14 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.animation as animation
 import warnings
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 import pandas as pd
 from sklearn.decomposition import PCA
 from datetime import datetime
 import imageio
 import cupy as cp
 from PIL import Image
-
-# print("GPU Acceleration Supported:", pv.global_theme.rendering_backend == 'OpenGL')
-
+# =============================================================================
 ### Path management
 import os
 from os.path import join
