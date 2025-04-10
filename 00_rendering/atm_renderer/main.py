@@ -22,7 +22,7 @@ print("VTK Version:", vtk.vtkVersion.GetVTKVersion())
 print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 # =============================================================================
 import pyvista as pv
-from tqdm import tqdm
+import tqdm
 import numpy as np
 import numba
 import matplotlib.pyplot as plt
