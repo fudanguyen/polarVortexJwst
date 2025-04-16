@@ -70,21 +70,73 @@ class SphericalMesh:
     def shape(self):
         return self.x.shape
 # ==============================================================================
-# Manage parameters for atmospheric features
+# Manage config and parameters
+# =============================================================================
+class TimeConfig:
+    """Centralized management of temporal parameters"""
+    def __init__(self, t0=0, t1=60, frames=60):
+        """
+        Args:
+            t0: Start time (hours)
+            t1: End time (hours)
+            frames: Number of animation frames
+        """
+        self.t0 = t0
+        self.t1 = t1
+        self.frames = frames
+        
+        # Derived properties
+        self.time_array = np.linspace(t0, t1, frames)
+        self.dt = (t1 - t0) / frames  # Time step
+        
+    def __repr__(self):
+        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames})"
 # =============================================================================
 class AtmosphericConfig:
-    def __init__(self, config, modu_config, modelname):
-        self.config = config  # Band/pole parameters
-        self.modu_config = modu_config  # Modulation type
+    """Combined atmospheric and temporal configuration"""
+    def __init__(self, 
+                 band_config: list,
+                 modu_config: str,
+                 modelname: str,
+                 time_config: TimeConfig,
+                 Fband: float = 0.6,
+                 Fambient: float  = 0.5,
+                 Fpolar: float  = 0.7,
+                 Pband: float  = 5.0,
+                 Ppol: float  = 60.0,
+                 speckey: dict = None):
+        """
+        Args:
+            band_config: Atmospheric band parameters
+            modu_config: Modulation type ('polarStatic' etc)
+            modelname: Simulation identifier
+            time_config: TimeConfig object
+            Fambient/band/pole: Ambient/band/pole base contrast value
+            Pband/pole: Band/pole period (in hours)
+            speckey: Spectral value mapping
+        """
+        self.band_config = band_config
+        self.modu_config = modu_config
         self.modelname = modelname
-        self._validate_config()
+        self.time_config = time_config
+        self.Fambient = Fambient
+        self.Fband = Fband
+        self.Fpolar = Fpolar
+        self.Pband = Pband
+        self.Ppol = Ppol
+        self.speckey = speckey or {'A': 0.25, 'B': 0.58, 'P': 0.75}
         
+        self._validate_config()
+
     def _validate_config(self):
-        """Ensure configuration has valid parameters"""
-        required_keys = ['lat2', 'lat1', 'amp', 'typ', 'phase', 'period']
-        for entry in self.config:
-            if len(entry) != len(required_keys):
-                raise ValueError("Invalid config entry")
+        """Sanity checks for configuration"""
+        if not isinstance(self.time_config, TimeConfig):
+            raise TypeError("time_config must be TimeConfig instance")
+        
+        required_band_keys = ['lat2', 'lat1', 'amp', 'typ', 'phase', 'period']
+        for band in self.band_config:
+            if len(band) != len(required_band_keys):
+                raise ValueError("Invalid band configuration")
 # ==============================================================================
 # Core atmospheric simulation logic
 # =============================================================================
@@ -123,7 +175,7 @@ class AtmosphericModel:
         sm = np.full_like(im, self.speckey['A']) if spec else None
         
         # Apply all configured atmospheric features
-        for group in self.config.config:
+        for group in self.config.band_config:
             lat2, lat1, amp, typ, phase, period = group
             lat_px1 = self._lat_px(lat1)
             lat_px2 = self._lat_px(lat2)
@@ -169,15 +221,15 @@ class AtmosphericModel:
     def _apply_vortices(self, im, t):
         """Vectorized vortices implementation"""
         # Get polar regions from config
-        polar_groups = [g for g in self.config.config if g[3].upper() == 'P']
+        polar_groups = [g for g in self.config.band_config if g[3].upper() == 'P']
         
         for group in polar_groups:
             lat2, lat1, *_ = group
-            im = self._circle_vortice_vectorized(im, lat1, lat2, t)
+            im = self._circle_vortice_vectorized(im, lat1, lat2, t, group)  # Pass full group
             
         return im
     
-    def _circle_vortice_vectorized(self, im, lat1, lat2, t):
+    def _circle_vortice_vectorized(self, im, lat1, lat2, t, group):
         """Vectorized vortex generator"""
         # Vortex properties (from config)
         radius_frac = 0.3
@@ -192,8 +244,9 @@ class AtmosphericModel:
         r_vortice = np.sqrt(radius_frac * area_cap) * (self.xsize / np.pi)
         ar, br = a * r_vortice, b * r_vortice
         
-        # Time-dependent longitudinal positions
-        long_positions = self._equidistant_longitudes(t, group[-1])  # Rotation period
+       # Time-dependent longitudinal positions
+        rotation_period = group[5]  # Get period from group data
+        long_positions = self._equidistant_longitudes(t, rotation_period)
         
         # Vectorized mask for all vortices
         for long_px in long_positions:
@@ -285,25 +338,28 @@ class DataManager:
 # =============================================================================
 
 # Example configuration
-config = [
+bandConfig = [
     # [lat2, lat1, amplitude, type, phase, period]
     [90, 65, 0.7, 'P', 0, 60],    # Polar cap
     [45, 38, 0.6, 'B', 10, 2.5],  # Mid-latitude band
     [-20, -40, 0.6, 'B', -26, 5]  # Southern band
 ]
 
+# When initializing the config:
 atmo_config = AtmosphericConfig(
-    config=config,
+    band_config=bandConfig,  # This is your band configuration list
     modu_config='polarStatic',
     modelname='production1',
-    Fambient=0.5,
+    time_config=TimeConfig(t0=0, t1=60, frames=60),
+    Fambient=0.5,  # This will be accessible as config.Fambient
+    Fband=0.6,
+    Fpolar=0.7,
     speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
 )
 
 # Initialize components
 mesh = SphericalMesh(resolution=200)
-config = AtmosphericConfig(...)
-model = AtmosphericModel(mesh, config)
+model = AtmosphericModel(mesh, atmo_config)
 
 # Generate atmosphere at t=30
 flux_map, spectral_map = model.generate_atmosphere(t=30, spec=True)
@@ -314,7 +370,7 @@ for t in range(0, 2):
     # Render with AtmosphereVisualizer
     
 runner = SimulationRunner(
-    config_params=config_params,
+    config_params=atmo_config,
     inclinations=[-30, 0, 30]
 )
 
