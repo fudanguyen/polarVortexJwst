@@ -331,8 +331,7 @@ class DataManager:
             for inclin, data in results.items():
                 f.create_dataset(f'{inclin}/gray', data=data['gray_array'])
                 f.create_dataset(f'{inclin}/meta', data=str(data['metadata']))
-                
-# ==============================================================================                
+                               
 # ==============================================================================
 # Set up configurations and test call
 # =============================================================================
