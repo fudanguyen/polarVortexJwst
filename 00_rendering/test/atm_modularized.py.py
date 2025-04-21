@@ -276,36 +276,42 @@ class AtmosphereVisualizer:
         self.mesh = mesh
         self.inclination = inclination
         self.plotter = self._create_plotter()
+        self._configure_camera()
+
+    def _configure_camera(self):
+        """Set camera parameters for proper spherical viewing"""
+        # Reset camera to auto-adjust to mesh bounds
+        self.plotter.camera.position = [0, 0, 2.5]  # Camera position (x, y, z)
+        self.plotter.camera.focal_point = [0, 0, 0]  # Look at origin
+        self.plotter.camera.parallel_scale = 1.2  # Critical zoom parameter
+        
+        # For spherical mesh of radius 1, good starting values:
+        self.plotter.camera.parallel_scale = self.mesh.radius * 2.4
+        self.plotter.camera.elevation = self.inclination
 
     def _create_plotter(self):
         """Configure PyVista plotter"""
-        """Configure PyVista plotter with proper camera setup"""
-        plotter = pv.Plotter(
-            off_screen=True,
-            window_size=(1024, 1024),  # Explicit size helps consistency
-            lighting="three lights"  # Better depth perception
-        )
+        plotter = pv.Plotter(off_screen=True)
         plotter.background_color = 'black'
+        plotter.camera.elevation = self.inclination + 56
         return plotter
     
     def render_frame(self, atmospheric_data):
-        """Render single timestep with full sphere visible"""
+        """Render single timestep"""
         self.plotter.clear()
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
-        
-        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False)
-        # Set camera to show full sphere
-        self.plotter.camera_position = [
-            (0, 0, 10),  # Camera position (2.5 radii away from origin)
-            (0, 0, 0),    # Focal point (center of sphere)
-            (0, 1, 0)     # View-up vector (keep north at top)
-        ]
-        # Apply inclination adjustment
-        self.plotter.camera.elevation = self.inclination
-        # Ensure entire mesh fits in view
-        self.plotter.reset_camera_clipping_range()
+        self.plotter.add_mesh(grid, cmap='inferno')
         return self.plotter.screenshot()
+    
+    def interactive_zoom_test(self):
+        """Interactive tool to find correct parallel_scale"""
+        print("Use mouse wheel to zoom, 'r' to reset camera")
+        self.plotter.show(auto_close=False)
+        self.plotter.add_text(
+            f"Current parallel_scale: {self.plotter.camera.parallel_scale:.2f}",
+            position="upper_edge")
+        self.plotter.show()
 # ==============================================================================
 # Run the simulation and visualization
 #===============================================================================
@@ -357,40 +363,50 @@ class DataManager:
 # Set up configurations and test call
 # =============================================================================
 
-# Example configuration
-Ppol, Pband = 60, 5  # Periods in hours
-Fpolar, Fband, Fambient = 0.7, 0.6, 0.5
-bandConfig = [
-    # [lat2, lat1, amplitude, type, phase, period]
-    [90, 65, Fpolar, 'P', 0, Ppol],
-    [45, 38., Fband, 'B', 10, Pband/2],
-    [25, 15, Fband, 'B', 150, Pband], 
-    [-10, -20, Fband, 'B', -26, Pband],
-    [-33, -40, Fband, 'B', 135, Pband/2],
-    [-65, -90, Fpolar, 'P', 0, Ppol]
-]
+# Initialize and test
+mesh = SphericalMesh(radius=1, resolution=200)
+visualizer = AtmosphereVisualizer(mesh, inclination=45)
 
-# When initializing the config:
-atmo_config = AtmosphericConfig(
-    band_config=bandConfig,  # This is your band configuration list
-    modu_config='polarStatic',
-    modelname='production1',
-    time_config=TimeConfig(t0=0, t1=60, frames=60),
-    Fambient=Fambient,  # This will be accessible as config.Fambient
-    Fband=Fband,
-    Fpolar=Fpolar,
-    speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
-)
+# Run interactive test
+visualizer.interactive_zoom_test()
 
-# Initialize components
-mesh = SphericalMesh(resolution=200)
-model = AtmosphericModel(mesh, atmo_config)
+# After finding good scale, hardcode it:
+visualizer.plotter.camera.parallel_scale = 1.2  # Your calibrated value
 
-runner = SimulationRunner(
-    config=atmo_config,
-    inclinations=[-30, 0, 30]
-)
+# # Example configuration
+# Ppol, Pband = 60, 5  # Periods in hours
+# Fpolar, Fband, Fambient = 0.7, 0.6, 0.5
+# bandConfig = [
+#     # [lat2, lat1, amplitude, type, phase, period]
+#     [90, 65, Fpolar, 'P', 0, Ppol],
+#     [45, 38., Fband, 'B', 10, Pband/2],
+#     [25, 15, Fband, 'B', 150, Pband], 
+#     [-10, -20, Fband, 'B', -26, Pband],
+#     [-33, -40, Fband, 'B', 135, Pband/2],
+#     [-65, -90, Fpolar, 'P', 0, Ppol]
+# ]
 
-runner.run_simulation(t0=0, t1=60, frames=2)
+# # When initializing the config:
+# atmo_config = AtmosphericConfig(
+#     band_config=bandConfig,  # This is your band configuration list
+#     modu_config='polarStatic',
+#     modelname='production1',
+#     time_config=TimeConfig(t0=0, t1=60, frames=60),
+#     Fambient=Fambient,  # This will be accessible as config.Fambient
+#     Fband=Fband,
+#     Fpolar=Fpolar,
+#     speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
+# )
 
-DataManager().save_simulation(runner.results, 'simulation_run1')
+# # Initialize components
+# mesh = SphericalMesh(resolution=200)
+# model = AtmosphericModel(mesh, atmo_config)
+
+# runner = SimulationRunner(
+#     config=atmo_config,
+#     inclinations=[-30, 0, 30]
+# )
+
+# runner.run_simulation(t0=0, t1=60, frames=2)
+
+# DataManager().save_simulation(runner.results, 'simulation_run1')
