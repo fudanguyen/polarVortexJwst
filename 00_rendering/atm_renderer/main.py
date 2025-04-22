@@ -181,7 +181,7 @@ class AtmosphericModel:
             lat_px2 = self._lat_px(lat2)
             
             # Vectorized latitude mask
-            mask = (self.lat_grid >= lat_px2) & (self.lat_grid <= lat_px1)
+            mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
             
             if typ.upper() == 'B':  # Band
                 im = self._apply_planetary_wave(im, mask, t, amp, phase, period)
@@ -230,43 +230,53 @@ class AtmosphericModel:
         return im
     
     def _circle_vortice_vectorized(self, im, lat1, lat2, t, group):
-        """Vectorized vortex generator"""
+        """Vectorized vortex generator (corrected)"""
+        # Sort latitudes (lat1 > lat2)
+        lat1, lat2 = sorted([lat1, lat2], reverse=True)
+        center_lat = (lat1 + lat2) / 2
+        center_px = self._lat_px(center_lat)
+        lat_px1 = self._lat_px(lat1)
+        lat_px2 = self._lat_px(lat2)
+        
         # Vortex properties (from config)
         radius_frac = 0.3
         a, b = 0.75, 0.25  # Ellipse axes
-        
-        # Center coordinates
-        center_lat = (lat1 + lat2) / 2
-        center_px = self._lat_px(center_lat)
-        
-        # Vortex radius calculation
         area_cap = 2 * np.pi * (np.sin(np.radians(lat2)) - np.sin(np.radians(lat1)))
         r_vortice = np.sqrt(radius_frac * area_cap) * (self.xsize / np.pi)
         ar, br = a * r_vortice, b * r_vortice
         
-       # Time-dependent longitudinal positions
-        rotation_period = group[5]  # Get period from group data
+        # Time-dependent longitudinal positions (corrected drift)
+        rotation_period = group[5]
         long_positions = self._equidistant_longitudes(t, rotation_period)
         
-        # Vectorized mask for all vortices
+        # Latitude mask
+        lat_mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
+        
+        # Amplitude from polar region
+        amplitude = im[int(self.xsize / 2), self.ysize - 1]  # Central pixel
+        
+        # Generate grid
+        xx, yy = np.meshgrid(np.arange(self.xsize), np.arange(self.ysize), indexing='ij')
+        
         for long_px in long_positions:
+            xi = int(long_px)
             ellipse_mask = (
-                ((self.xx - long_px) ** 2 / ar ** 2) +
-                ((self.yy - center_px) ** 2 / br ** 2)
+                ((xx - xi) ** 2 / ar ** 2) + 
+                ((yy - center_px) ** 2 / br ** 2)
             ) <= 1
             
-            lat_mask = (self.lat_grid >= self._lat_px(lat2)) & \
-                       (self.lat_grid <= self._lat_px(lat1))
-            
-            im[ellipse_mask & lat_mask] += 0.2  # Flux enhancement
-            
+            im[ellipse_mask & lat_mask] = amplitude + 0.2  # Dynamic amplitude + flux
+        
         return im
     
     def _equidistant_longitudes(self, t, rotation_period):
         """Calculate vortex positions (vectorized)"""
         n_vortices = 5  # From original code
         base_pos = np.linspace(0, self.xsize, n_vortices + 1)[:-1]
-        drift = (t / rotation_period) * self.xsize
+        # drift = (t / rotation_period) * self.xsize
+        drift = ( (-t % rotation_period) / rotation_period ) * self.xsize  
+        # Negative drift + modulo
+        
         return (base_pos + drift) % self.xsize
 # ==============================================================================
 # Visualization of atmospheric data using PyVista
@@ -276,6 +286,7 @@ class AtmosphereVisualizer:
         self.mesh = mesh
         self.inclination = inclination
         self.plotter = self._create_plotter()
+        self.plotter.camera.parallel_scale = 0.99  # For photometry
 
     def _create_plotter(self):
         """Configure PyVista plotter"""
@@ -297,7 +308,7 @@ class AtmosphereVisualizer:
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False)
         # Set camera to show full sphere
         self.plotter.camera_position = [
-            (0, 0, 10),  # Camera position (2.5 radii away from origin)
+            (0, 0, 4),  # Camera position (2.5 radii away from origin)
             (0, 0, 0),    # Focal point (center of sphere)
             (0, 1, 0)     # View-up vector (keep north at top)
         ]
