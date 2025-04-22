@@ -241,7 +241,9 @@ class AtmosphericModel:
         # Vortex properties (from config)
         radius_frac = 0.3
         a, b = 0.75, 0.25  # Ellipse axes
-        area_cap = 2 * np.pi * (np.sin(np.radians(lat2)) - np.sin(np.radians(lat1)))
+        # Make sure area_cap doesn't become negative 
+        # when lat1 < lat2 (e.g., southern hemisphere).
+        area_cap = 2 * np.pi * abs(np.sin(np.radians(lat1)) - np.sin(np.radians(lat2)))
         r_vortice = np.sqrt(radius_frac * area_cap) * (self.xsize / np.pi)
         ar, br = a * r_vortice, b * r_vortice
         
@@ -265,7 +267,7 @@ class AtmosphericModel:
                 ((yy - center_px) ** 2 / br ** 2)
             ) <= 1
             
-            im[ellipse_mask & lat_mask] = amplitude + 0.2  # Dynamic amplitude + flux
+            im[ellipse_mask & lat_mask] += 0.2  # Dynamic amplitude + flux
         
         return im
     
@@ -399,7 +401,7 @@ model = AtmosphericModel(mesh, atmo_config)
 
 runner = SimulationRunner(
     config=atmo_config,
-    inclinations=[-30, 0, 30]
+    inclinations=[-90, -60, -30, 0, 30, 60, 60]
 )
 
 runner.run_simulation(t0=0, t1=60, frames=2)
