@@ -182,6 +182,7 @@ class AtmosphericModel:
             
             # Vectorized latitude mask
             mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
+            im[mask] = amp
             
             if typ.upper() == 'B':  # Band
                 im = self._apply_planetary_wave(im, mask, t, amp, phase, period)
@@ -194,7 +195,7 @@ class AtmosphericModel:
                 
         # Apply vortices if needed
         if self.config.modu_config in ['polarStatic', 'polarDynamic']:
-            im = self._apply_vortices(im, t)
+            im = self._apply_vortices(im, t, self.config.modu_config)
             
         return (im, sm) if spec else im
     
@@ -214,22 +215,23 @@ class AtmosphericModel:
     
     def _apply_polar_effect(self, im, mask, t, amp, phase, period):
         """Polar cap modulation (vectorized)"""
+        
         flux = amp * np.sin(2 * np.pi / period * t + phase * np.pi / 180)
         im[mask] += flux
         return im
     
-    def _apply_vortices(self, im, t):
+    def _apply_vortices(self, im, t, modu_config):
         """Vectorized vortices implementation"""
         # Get polar regions from config
         polar_groups = [g for g in self.config.band_config if g[3].upper() == 'P']
         
         for group in polar_groups:
             lat2, lat1, *_ = group
-            im = self._circle_vortice_vectorized(im, lat1, lat2, t, group)  # Pass full group
+            im = self._circle_vortice_vectorized(im, lat1, lat2, t, group, modu_config)  # Pass full group
             
         return im
     
-    def _circle_vortice_vectorized(self, im, lat1, lat2, t, group):
+    def _circle_vortice_vectorized(self, im, lat1, lat2, t, group, modu_config):
         """Vectorized vortex generator (corrected)"""
         # Sort latitudes (lat1 > lat2)
         lat1, lat2 = sorted([lat1, lat2], reverse=True)
@@ -252,34 +254,48 @@ class AtmosphericModel:
         long_positions = self._equidistant_longitudes(t, rotation_period)
         
         # Latitude mask
-        lat_mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
+        lat_mask = (self.yy <= lat_px2) & (self.yy >= lat_px1)
         
         # Amplitude from polar region
         amplitude = im[int(self.xsize / 2), self.ysize - 1]  # Central pixel
         
         # Generate grid
-        xx, yy = np.meshgrid(np.arange(self.xsize), np.arange(self.ysize), indexing='ij')
+        # xx, yy = np.meshgrid(np.arange(self.xsize), np.arange(self.ysize), indexing='ij')
         
-        for long_px in long_positions:
+        if modu_config == 'polarDynamic':
+            phase_values = np.array([0, -2, 5, -4, 8, 2, 4, -6, -8])  # Phase offsets
+            variableflux = 0.2 * np.sin(2 * np.pi / rotation_period * t - phase_values[i % len(phase_values)])
+        elif modu_config == 'polarStatic':
+            phase_values = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])  # Phase offsets
+            variableflux = 0
+        amplitude = 0.5*im[int(self.xsize / 2), self.ysize - 1]  # Dynamic amplitude
+
+        # Time-dependent positions (correct drift)
+        rotation_period = group[5]
+        long_positions = self._equidistant_longitudes(t, rotation_period)
+        
+        for i, long_px in enumerate(long_positions):
             xi = int(long_px)
             ellipse_mask = (
-                ((xx - xi) ** 2 / ar ** 2) + 
-                ((yy - center_px) ** 2 / br ** 2)
+                ((self.xx - xi) ** 2 / ar ** 2) + 
+                ((self.yy - center_px) ** 2 / br ** 2)
             ) <= 1
             
-            im[ellipse_mask & lat_mask] += 0.2  # Dynamic amplitude + flux
-        
+            im[ellipse_mask & lat_mask] += amplitude + variableflux  # Dynamic adjustment
         return im
     
+    def _long_px(self, long_deg):
+        """Convert longitude (degrees) to pixel coordinate."""
+        return (long_deg / 360) * self.xsize  # Match original code's `long()` function
+
     def _equidistant_longitudes(self, t, rotation_period):
-        """Calculate vortex positions (vectorized)"""
-        n_vortices = 5  # From original code
-        base_pos = np.linspace(0, self.xsize, n_vortices + 1)[:-1]
-        # drift = (t / rotation_period) * self.xsize
-        drift = ( (-t % rotation_period) / rotation_period ) * self.xsize  
-        # Negative drift + modulo
-        
+        """Calculate vortex positions with correct degree-to-pixel conversion."""
+        n_vortices = 5
+        base_pos_deg = np.linspace(0, 360, n_vortices + 1)[:-1]  # Degrees (0-360)
+        base_pos = self._long_px(base_pos_deg)  # Convert to pixels
+        drift = ((-t % rotation_period) / rotation_period) * self.xsize
         return (base_pos + drift) % self.xsize
+    
 # ==============================================================================
 # Visualization of atmospheric data using PyVista
 # =============================================================================
@@ -288,7 +304,6 @@ class AtmosphereVisualizer:
         self.mesh = mesh
         self.inclination = inclination
         self.plotter = self._create_plotter()
-        self.plotter.camera.parallel_scale = 0.99  # For photometry
 
     def _create_plotter(self):
         """Configure PyVista plotter"""
@@ -298,7 +313,8 @@ class AtmosphereVisualizer:
             window_size=(1024, 1024),  # Explicit size helps consistency
             lighting="three lights"  # Better depth perception
         )
-        plotter.background_color = 'black'
+        plotter.camera.SetParallelProjection(True) # Set parallel projection for photometry
+        plotter.background_color = 'black' # Set background color to black
         return plotter
     
     def render_frame(self, atmospheric_data):
@@ -306,18 +322,19 @@ class AtmosphereVisualizer:
         self.plotter.clear()
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
-        
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False)
-        # Set camera to show full sphere
-        self.plotter.camera_position = [
-            (0, 0, 4),  # Camera position (2.5 radii away from origin)
-            (0, 0, 0),    # Focal point (center of sphere)
-            (0, 1, 0)     # View-up vector (keep north at top)
-        ]
+        
+        # Set camera to look at the sphere orthographically
+        self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
+        self.plotter.camera.focal_point = (0, 0, 0)  # Center of the sphere
+        self.plotter.camera.up = (0, 1, 0)  # Keep north at the top
+        
         # Apply inclination adjustment
         self.plotter.camera.elevation = self.inclination
-        # Ensure entire mesh fits in view
-        self.plotter.reset_camera_clipping_range()
+
+        # Fine-tune the field of view with parallel_scale
+        self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
+    
         return self.plotter.screenshot()
 # ==============================================================================
 # Run the simulation and visualization
@@ -370,9 +387,9 @@ class DataManager:
 # Set up configurations and test call
 # =============================================================================
 
-# Example configuration
+# Set up band_config: latitudinal features
 Ppol, Pband = 60, 5  # Periods in hours
-Fpolar, Fband, Fambient = 0.7, 0.6, 0.5
+Fpolar, Fband, Fambient = 0.75, 0.7, 0.5
 bandConfig = [
     # [lat2, lat1, amplitude, type, phase, period]
     [90, 65, Fpolar, 'P', 0, Ppol],
@@ -383,7 +400,7 @@ bandConfig = [
     [-65, -90, Fpolar, 'P', 0, Ppol]
 ]
 
-# When initializing the config:
+# Set up atmosphere config: the rest of the simulation
 atmo_config = AtmosphericConfig(
     band_config=bandConfig,  # This is your band configuration list
     modu_config='polarStatic',
@@ -395,15 +412,30 @@ atmo_config = AtmosphericConfig(
     speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
 )
 
-# Initialize components
+# Set up the spherical mesh, initialization
 mesh = SphericalMesh(resolution=200)
 model = AtmosphericModel(mesh, atmo_config)
 
+# Set up the inclination configuration
 runner = SimulationRunner(
     config=atmo_config,
-    inclinations=[-90, -60, -30, 0, 30, 60, 60]
+    inclinations=[-90, -60, -30, 0, 30, 60, 90]
 )
 
-runner.run_simulation(t0=0, t1=60, frames=2)
+# Run the simulation for a specific time range and number of frames
+runner.run_simulation(t0=30, t1=60, frames=2)
 
+# Save the simulation results
 DataManager().save_simulation(runner.results, 'simulation_run1')
+
+# Test the output
+def plot_frame(h5_path, inclination):
+    with h5py.File(h5_path, 'r') as f:
+        frame_data = f[f'{inclination}/gray'][0]  # First frame
+        plt.imshow(frame_data)
+        plt.show()
+
+filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', 'simulation_run1.h5')
+plot_frame(filepath, inclination=0)
+plot_frame(filepath, inclination=30)
+plot_frame(filepath, inclination=90)
