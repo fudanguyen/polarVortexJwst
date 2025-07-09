@@ -34,7 +34,6 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from datetime import datetime
 import imageio
-import cupy as cp
 from PIL import Image
 # =============================================================================
 ### Path management

@@ -48,7 +48,7 @@ from datetime import datetime
 
 # new imports
 import imageio
-import cupy as cp
+# import cupy as cp
 from PIL import Image
 
 ### Path management
