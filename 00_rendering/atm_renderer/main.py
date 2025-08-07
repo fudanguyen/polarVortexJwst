@@ -241,7 +241,7 @@ class AtmosphericModel:
         
         # Vortex properties (from config)
         radius_frac = 0.3
-        a, b = 0.75, 0.25  # Ellipse axes
+        a, b = 0.70, 0.25  # Ellipse axes
         # Make sure area_cap doesn't become negative 
         # when lat1 < lat2 (e.g., southern hemisphere).
         area_cap = 2 * np.pi * abs(np.sin(np.radians(lat1)) - np.sin(np.radians(lat2)))
@@ -251,7 +251,7 @@ class AtmosphericModel:
         # Time-dependent longitudinal positions (corrected drift)
         rotation_period = group[5]
         long_positions = self._equidistant_longitudes(t, rotation_period)
-        
+
         # Latitude mask
         lat_mask = (self.yy <= lat_px2) & (self.yy >= lat_px1)
         
@@ -262,12 +262,12 @@ class AtmosphericModel:
         # xx, yy = np.meshgrid(np.arange(self.xsize), np.arange(self.ysize), indexing='ij')
         
         if modu_config == 'polarDynamic':
-            phase_values = np.array([0, -2, 5, -4, 8, 2, 4, -6, -8])  # Phase offsets
+            phase_values = np.array(2*[0, -2, 5, -4, 8, 2, 4, -6, -8])  # Phase offsets
             variableflux = 0.2 * np.sin(2 * np.pi / rotation_period * t - phase_values[i % len(phase_values)])
         elif modu_config == 'polarStatic':
-            phase_values = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])  # Phase offsets
+            phase_values = np.array(2*[0, 0, 0, 0, 0, 0, 0, 0, 0])  # Phase offsets
             variableflux = 0
-        amplitude = 0.5*im[int(self.xsize / 2), self.ysize - 1]  # Dynamic amplitude
+        amplitude = 0.25*im[int(self.xsize / 2), self.ysize - 1]  # Dynamic amplitude
 
         # Time-dependent positions (correct drift)
         rotation_period = group[5]
@@ -293,7 +293,16 @@ class AtmosphericModel:
         base_pos_deg = np.linspace(0, 360, n_vortices + 1)[:-1]  # Degrees (0-360)
         base_pos = self._long_px(base_pos_deg)  # Convert to pixels
         drift = ((-t % rotation_period) / rotation_period) * self.xsize
-        return (base_pos + drift) % self.xsize
+        long_positions = (base_pos + drift) % self.xsize  # Overflow
+
+        # Wrap around logic: no empty edges 
+        dxCen = np.diff(base_pos)[0]
+        if long_positions.min() <= base_pos.min():
+            long_positions = np.append(long_positions, long_positions.max() + dxCen)
+        if long_positions.max() >= base_pos.max():
+            long_positions = np.append(long_positions, long_positions.min() - dxCen)   
+
+        return long_positions
     
 # ==============================================================================
 # Visualization of atmospheric data using PyVista
@@ -418,23 +427,22 @@ model = AtmosphericModel(mesh, atmo_config)
 # Set up the inclination configuration
 runner = SimulationRunner(
     config=atmo_config,
-    inclinations=[-90, -60, -30, 0, 30, 60, 90]
+    inclinations=[30]
 )
 
 # Run the simulation for a specific time range and number of frames
-runner.run_simulation(t0=30, t1=60, frames=2)
+runner.run_simulation(t0=0, t1=60, frames=60)
 
 # Save the simulation results
 DataManager().save_simulation(runner.results, 'simulation_run1')
 
 # Test the output
-def plot_frame(h5_path, inclination):
+def plot_frame(h5_path, inclination, t=0):
     with h5py.File(h5_path, 'r') as f:
-        frame_data = f[f'{inclination}/gray'][0]  # First frame
-        plt.imshow(frame_data)
+        frame_data = f[f'{inclination}/gray'][t]  # First frame
+        plt.imshow(frame_data, vmin=0.1, vmax=0.9, cmap='inferno')
         plt.show()
 
 filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', 'simulation_run1.h5')
-plot_frame(filepath, inclination=0)
-plot_frame(filepath, inclination=30)
-plot_frame(filepath, inclination=90)
+for t in range(60):
+    plot_frame(filepath, inclination=30, t=t)``

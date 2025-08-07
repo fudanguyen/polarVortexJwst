@@ -209,7 +209,7 @@ def circle_vortice(recmap, coord, t=0, number=5, variable_vortice=False, rotatio
 
 def circle_vortice_vectorized(recmap, coord, t=0, number=5, variable_vortice=False, rotation_period=30):
     radiusfrac = 0.3
-    a, b = 0.75, 0.25
+    a, b = 0.7, 0.20
 
     phaseValue = np.zeros(9) if not variable_vortice else np.array([0, -2, 5, -4, 8, 2, 4, -6, -8])
     
@@ -238,6 +238,22 @@ def circle_vortice_vectorized(recmap, coord, t=0, number=5, variable_vortice=Fal
             revised_center_coord_long_px
         )
         
+        dxCen = np.diff(long(center_coord_long))[0]
+        if revised_center_coord_long_px.min() < long(center_coord_long).min():
+            revised_center_coord_long_px = np.append(
+                revised_center_coord_long_px,
+                revised_center_coord_long_px.max() + dxCen
+            )
+        elif revised_center_coord_long_px.max() > long(center_coord_long).max():
+            revised_center_coord_long_px = np.append(
+                revised_center_coord_long_px, 
+                revised_center_coord_long_px.min() - dxCen
+            )
+
+        # make sure flux array matches
+        if revised_center_coord_long_px.size > variableflux.size:
+            variableflux = np.append(variableflux, variableflux[0])
+
         # Vectorized mask for vortices
         xx, yy = np.meshgrid(np.arange(xsize), np.arange(ysize), indexing='ij')
         for i, xi in enumerate(revised_center_coord_long_px):
@@ -282,12 +298,12 @@ draw_animation = True
 save_animation = False
 
 ######## save the first still frame ##############
-save_still = True 
-# save_still = False 
+# save_still = True 
+save_still = False 
 
 ######### save the spectral type map #############
-save_specmap = True
-# save_specmap = False
+# save_specmap = True
+save_specmap = False
 ###############################
 
 ### save or run command 
@@ -365,9 +381,9 @@ t0, t1 = 0,60
 # =============================================================================
 #  Inclination Value of the models.
 # =============================================================================
-inclination = [-90, -80, -70, -60, -50, -40, -30, -20, -10, 0.]
+# inclination = [-90, -80, -70, -60, -50, -40, -30, -20, -10, 0.]
 # inclination = [-60, -10]
-# inclination =[-30, 30]
+inclination =[-30]
 # inclination = [-90]
 
 # =============================================================================
@@ -447,6 +463,7 @@ for counter, inclin in enumerate(inclination):
             # Vectorize vortices (see Step 2)
             if modu_config in ['polarDynamic', 'polarStatic']:
                 polar_lats = [[g[0], g[1]] for g in config if g[3] in ['P', 'p']]
+                # im = circle_vortice_(im, polar_lats, t=t, rotation_period=period)
                 im = circle_vortice_vectorized(im, polar_lats, t=t, rotation_period=period)
             
             return (im, sm) if spec else im
@@ -656,7 +673,7 @@ for counter, inclin in enumerate(inclination):
     ### Plot and save the first photometry frame
     if inlinePlot: 
         plt.figure(dpi=300), plt.tight_layout()
-        plt.imshow(gray_array[0], cmap='inferno')
+        plt.imshow(gray_array[1], cmap='inferno')
         plt.title('Photometry at t0 [%s][%s][i=%i]:'%(modu_config, modelname, inclin))  
         plt.show()
         
@@ -669,5 +686,10 @@ for counter, inclin in enumerate(inclination):
 print('Elapsed Time: ')
 print(datetime.now() - startTime)
 plt.close('all')
+ # %%%
+plt.close()
+for t in range (10):
+    plt.figure(), plt.tight_layout()
+    plt.imshow(gray_array[t*3], cmap='inferno')
 
- # %%
+# %%
