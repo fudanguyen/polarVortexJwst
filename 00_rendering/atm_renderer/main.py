@@ -99,8 +99,11 @@ class AtmosphericConfig:
                  modelname: str,
                  time_config: TimeConfig,
                  Fband: float = 0.6,
+                 Fband_var: float = 0.05,
                  Fambient: float  = 0.5,
+                 Fambient_var: float = 0.00,
                  Fpolar: float  = 0.7,
+                 Fpolar_var: float = 0.05,
                  Pband: float  = 5.0,
                  Ppol: float  = 60.0,
                  speckey: dict = None):
@@ -110,7 +113,8 @@ class AtmosphericConfig:
             modu_config: Modulation type ('polarStatic' etc)
             modelname: Simulation identifier
             time_config: TimeConfig object
-            Fambient/band/pole: Ambient/band/pole base contrast value
+            Fambient/band/pole: Ambient/band/pole base contrast value (amp)
+            Fambient_var/band_var/polar_var: Variability value (variab) 
             Pband/pole: Band/pole period (in hours)
             speckey: Spectral value mapping
         """
@@ -118,9 +122,14 @@ class AtmosphericConfig:
         self.modu_config = modu_config
         self.modelname = modelname
         self.time_config = time_config
+        # Base contrast values
         self.Fambient = Fambient
+        self.Fambient_var = Fambient_var
         self.Fband = Fband
+        self.Fband_var = Fband_var
         self.Fpolar = Fpolar
+        self.Fpolar_var = Fpolar_var
+        # Periods in hours
         self.Pband = Pband
         self.Ppol = Ppol
         self.speckey = speckey or {'A': 0.25, 'B': 0.58, 'P': 0.75}
@@ -132,7 +141,7 @@ class AtmosphericConfig:
         if not isinstance(self.time_config, TimeConfig):
             raise TypeError("time_config must be TimeConfig instance")
         
-        required_band_keys = ['lat2', 'lat1', 'amp', 'typ', 'phase', 'period']
+        required_band_keys = ['lat2', 'lat1', 'amp', 'typ', 'phase', 'period', 'variab']
         for band in self.band_config:
             if len(band) != len(required_band_keys):
                 raise ValueError("Invalid band configuration")
@@ -157,7 +166,27 @@ class AtmosphericModel:
         
         # Precompute latitude grid (vectorized)
         self.lat_grid = np.abs(self.yy - 90) / 180 * self.ysize  # From lat() function
+
+    def generate_specmap(self):
+        """
+        Generate a spectral mask based on the speckey configuration.
         
+        Returns:
+            sm: Spectral mask array with shape (xsize, ysize)
+        """
+        sm = np.full((self.xsize, self.ysize), self.speckey['A'], dtype=np.float32)
+
+        for group in self.config.band_config:
+            lat2, lat1, amp, typ, phase, period, variab = group
+            lat_px1 = self._lat_px(lat1)
+            lat_px2 = self._lat_px(lat2)
+            
+            # Vectorized latitude mask
+            mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
+            sm[mask] = self.speckey[typ.upper()]
+        
+        return sm
+
     def generate_atmosphere(self, t, spec=False):
         """
         Generate atmospheric map at time `t`.
@@ -175,7 +204,7 @@ class AtmosphericModel:
         
         # Apply all configured atmospheric features
         for group in self.config.band_config:
-            lat2, lat1, amp, typ, phase, period = group
+            lat2, lat1, amp, typ, phase, period, variab = group
             lat_px1 = self._lat_px(lat1)
             lat_px2 = self._lat_px(lat2)
             
@@ -184,10 +213,10 @@ class AtmosphericModel:
             im[mask] = amp
             
             if typ.upper() == 'B':  # Band
-                im = self._apply_planetary_wave(im, mask, t, amp, phase, period)
+                im = self._apply_planetary_wave(im, mask, t, amp, phase, period, variab)
                 
             elif typ.upper() == 'P':  # Polar
-                im = self._apply_polar_effect(im, mask, t, amp, phase, period)
+                im = self._apply_polar_effect(im, mask, t, amp, phase, period, variab)
                 
             if spec:
                 sm[mask] = self.speckey[typ.upper()]
@@ -202,23 +231,24 @@ class AtmosphericModel:
         """Convert latitude to pixel coordinate (vectorized)"""
         return np.abs(lat_deg - 90) / 180 * self.ysize
     
-    def _apply_planetary_wave(self, im, mask, t, amp, phase, period):
+    def _apply_planetary_wave(self, im, mask, t, amp, phase, period, variab):
         """Vectorized planetary wave implementation"""
         # Spatial frequency (1/wavelength)
         w = self.xsize  # Full circumference resolution
-        sine_wave = amp * np.sin(
+        sine_wave = variab * np.sin(
             2 * np.pi / w * (self.xx + (t / period) * w) + phase * np.pi / 180
         )
         im[mask] += sine_wave[mask]
         return im
     
-    def _apply_polar_effect(self, im, mask, t, amp, phase, period):
+    def _apply_polar_effect(self, im, mask, t, amp, phase, period, variab):
         """Polar cap modulation (vectorized)"""
         
-        flux = amp * np.sin(2 * np.pi / period * t + phase * np.pi / 180)
+        flux = variab * np.sin(2 * np.pi / period * t + phase * np.pi / 180)
         im[mask] += flux
         return im
     
+    # [Deprecated] : vectorized vortices implementation
     def _apply_vortices(self, im, t, modu_config):
         """Vectorized vortices implementation"""
         # Get polar regions from config
@@ -226,7 +256,7 @@ class AtmosphericModel:
         
         for group in polar_groups:
             lat2, lat1, *_ = group
-            im = self._circle_vortice_vectorized(im, lat1, lat2, t, group, modu_config)  # Pass full group
+            # im = self._circle_vortice_vectorized(im, lat1, lat2, t, group, modu_config)  # Pass full group
             
         return im
     
@@ -325,12 +355,34 @@ class AtmosphereVisualizer:
         plotter.background_color = 'black' # Set background color to black
         return plotter
     
-    def render_frame(self, atmospheric_data):
+    def render_specmask(self, specmap, color_lim=[0.0, 1.0]):
+        """Render spectral mask with full sphere visible"""
+        self.plotter.clear()
+        grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
+        grid.point_data['scalars'] = specmap.ravel(order='F')
+        self.plotter.add_mesh(grid, cmap='viridis', show_scalar_bar=False,
+                              clim=color_lim)
+        
+        # Set camera to look at the sphere orthographically
+        self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
+        self.plotter.camera.focal_point = (0, 0, 0)  # Center of the sphere
+        self.plotter.camera.up = (0, 1, 0)  # Keep north at the top
+        
+        # Apply inclination adjustment
+        self.plotter.camera.elevation = self.inclination
+
+        # Fine-tune the field of view with parallel_scale
+        self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
+    
+        return self.plotter.screenshot()
+
+    def render_frame(self, atmospheric_data, color_lim=[0.0, 1.0]):
         """Render single timestep with full sphere visible"""
         self.plotter.clear()
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
-        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False)
+        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
+                              clim=color_lim)
         
         # Set camera to look at the sphere orthographically
         self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
@@ -354,7 +406,7 @@ class SimulationRunner:
         self.inclinations = inclinations
         self.results = {}
     
-    def run_simulation(self, t0=0, t1=60, frames=60):
+    def run_simulation(self, t0=0, t1=60, frames=60, color_lim=[0.0, 1.0]):
         time_array = np.linspace(t0, t1, frames)
         
         for inclin in self.inclinations:
@@ -363,13 +415,17 @@ class SimulationRunner:
             
             results = {
                 'gray_array': [],
-                'metadata': self.config.__dict__
+                'metadata': self.config.__dict__,
+                'specmask': [],
             }
             
             for t in time_array:
                 atmospheric_data = model.generate_atmosphere(t)
-                frame = visualizer.render_frame(atmospheric_data)
+                specmap = model.generate_specmap()
+                frame = visualizer.render_frame(atmospheric_data, color_lim=color_lim)
+                specmask = visualizer.render_specmask(specmap, color_lim=color_lim)
                 results['gray_array'].append(frame)
+                results['specmask'] = specmask
             
             self.results[inclin] = results
 # ============================================================================
@@ -388,61 +444,85 @@ class DataManager:
         output_path = os.path.join(self.base_path, f'{prefix}.h5')
         with h5py.File(output_path, 'w') as f:
             for inclin, data in results.items():
-                f.create_dataset(f'{inclin}/gray', data=np.array(data['gray_array']))
-                f.create_dataset(f'{inclin}/meta', data=str(data['metadata']))
-                
+                f.create_dataset(f'{inclin}/gray_array', data=np.array(data['gray_array']))
+                f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
+                f.create_dataset(f'{inclin}/metadata', data=str(data['metadata']))
+# ==============================================================================
+# Light curve generation and plotting
+# ==============================================================================
+class LightCurveGenerator:
+    def __init__(self, results):
+        """
+        Args:
+            results: Simulation results dictionary from SimulationRunner
+        """
+        self.results = results
+
+
 # ==============================================================================
 # Set up configurations and test call
 # =============================================================================
 
-# Set up band_config: latitudinal features
-Ppol, Pband = 60, 5  # Periods in hours
-Fpolar, Fband, Fambient = 0.75, 0.7, 0.5
-bandConfig = [
-    # [lat2, lat1, amplitude, type, phase, period]
-    [90, 65, Fpolar, 'P', 0, Ppol],
-    [45, 38., Fband, 'B', 10, Pband/2],
-    [25, 15, Fband, 'B', 150, Pband], 
-    [-10, -20, Fband, 'B', -26, Pband],
-    [-33, -40, Fband, 'B', 135, Pband/2],
-    [-65, -90, Fpolar, 'P', 0, Ppol]
-]
+if __name__ == "__main__":
 
-# Set up atmosphere config: the rest of the simulation
-atmo_config = AtmosphericConfig(
-    band_config=bandConfig,  # This is your band configuration list
-    modu_config='polarStatic',
-    modelname='production1',
-    time_config=TimeConfig(t0=0, t1=60, frames=60),
-    Fambient=Fambient,  # This will be accessible as config.Fambient
-    Fband=Fband,
-    Fpolar=Fpolar,
-    speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
-)
+    # Set up band_config: latitudinal features
+    Ppol, Pband = 60, 5  # Periods in hours
+    Fpolar, Fband, Fambient = 0.7, 0.75, 0.4 # amp
+    Fpolar_var, Fband_var, Fambient_var = 0.1, 0.1, 0.00 # variab
+    # variability: amp + variab * sin(...)
+    bandConfig = [
+        # [lat2, lat1, amplitude, type, phase, period]
+        [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
+        [45, 38., Fband, 'B', 10, Pband/2, Fband_var],
+        [25, 15, Fband, 'B', 150, Pband, Fband_var], 
+        [-10, -20, Fband, 'B', -26, Pband, Fband_var],
+        [-33, -40, Fband, 'B', 135, Pband/2, Fband_var],
+        [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
+    ]
 
-# Set up the spherical mesh, initialization
-mesh = SphericalMesh(resolution=200)
-model = AtmosphericModel(mesh, atmo_config)
+    # Set up atmosphere config: the rest of the simulation
+    atmo_config = AtmosphericConfig(
+        band_config=bandConfig,  # This is your band configuration list
+        modu_config='polarStatic',
+        modelname='production1',
+        time_config=TimeConfig(t0=0, t1=60, frames=60),
+        Fambient=Fambient,  # This will be accessible as config.Fambient
+        Fband=Fband,
+        Fpolar=Fpolar,
+        speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
+    )
 
-# Set up the inclination configuration
-runner = SimulationRunner(
-    config=atmo_config,
-    inclinations=[30]
-)
+    # Set up the spherical mesh, initialization
+    mesh = SphericalMesh(resolution=200)
+    model = AtmosphericModel(mesh, atmo_config)
 
-# Run the simulation for a specific time range and number of frames
-runner.run_simulation(t0=0, t1=60, frames=60)
+    # Set up the inclination configuration
+    runner = SimulationRunner(
+        config=atmo_config,
+        inclinations=[30]
+    )
 
-# Save the simulation results
-DataManager().save_simulation(runner.results, 'simulation_run1')
+    # Run the simulation for a specific time range and number of frames
+    runner.run_simulation(t0=0, t1=60, frames=60, color_lim=[0.2, 1.0]) 
+    # color_lim sets the color range for spatial visualization
 
-# Test the output
-def plot_frame(h5_path, inclination, t=0):
-    with h5py.File(h5_path, 'r') as f:
-        frame_data = f[f'{inclination}/gray'][t]  # First frame
-        plt.imshow(frame_data, vmin=0.1, vmax=0.9, cmap='inferno')
-        plt.show()
+    # Save the simulation results
+    DataManager().save_simulation(runner.results, 'simulation_run00')
 
-filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', 'simulation_run1.h5')
-for t in range(60):
-    plot_frame(filepath, inclination=30, t=t)``
+    # Test the output
+    def plot_frames(h5_path, inclination, t=0, handle='gray'):
+        with h5py.File(h5_path, 'r') as f:
+            if handle == 'gray':
+                data = f[f'{inclination}/gray_array'][t]  # First frame
+                plt.imshow(data, vmin=0.0, vmax=1.0, cmap='inferno')
+            elif handle == 'spec':
+                data = f[f'{inclination}/specmask']
+                plt.imshow(data, vmin=0.3, vmax=0.5, cmap='viridis')
+            plt.show()
+
+    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', 'simulation_run00.h5')
+    for t in range(60):
+        plot_frames(filepath, inclination=30, t=t, handle='gray')
+    
+    plot_frames(filepath, inclination=30, handle='spec')
+
