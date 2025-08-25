@@ -400,7 +400,7 @@ class AtmosphereVisualizer:
         self.plotter.clear()
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = specmap.ravel(order='F')
-        self.plotter.add_mesh(grid, show_scalar_bar=False,
+        self.plotter.add_mesh(grid, show_scalar_bar=False, interpolate_before_map=True,
                               cmap='viridis')
         
         # Set camera to look at the sphere orthographically
@@ -427,9 +427,9 @@ class AtmosphereVisualizer:
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
-                              clim=color_lim
-        )
-        
+                              clim=color_lim, interpolate_before_map=True)
+        self.plotter.add_mesh(grid, style="wireframe", color="white")
+
         # Set camera to look at the sphere orthographically
         self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
         self.plotter.camera.focal_point = (0, 0, 0)  # Center of the sphere
@@ -503,7 +503,6 @@ class SimulationRunner:
     # ===================================
     @staticmethod
     def save_video_from_array(gray_array, filepath, fps=30):
-        import cv2
         # Ensure frames are uint8
         frames_uint8 = (np.clip(gray_array, 0, 1) * 255).astype(np.uint8) \
             if gray_array.dtype != np.uint8 else gray_array
@@ -584,10 +583,10 @@ if __name__ == "__main__":
     )
 
     # Set up the spherical mesh, initialization
-    mesh = SphericalMesh(resolution=400)
+    mesh = SphericalMesh(resolution=200)
     model = AtmosphericModel(mesh, atmo_config)
 
-    incli_array = [60] # List of inclinations to simulate
+    incli_array = [-59] # List of inclinations to simulate
     # Set up the inclination configuration
     runner = SimulationRunner(
         config=atmo_config,
@@ -614,10 +613,11 @@ if __name__ == "__main__":
                 data = f[f'{inclination}/specmask']
                 plt.imshow(data, cmap='viridis')
             plt.show()
+            plt.close()
 
     filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
     for inc in incli_array:
-        # for t in range(60):
-            # plot_frames(filepath, inclination=inc, t=t, handle='gray')
+        for t in range(10):
+            plot_frames(filepath, inclination=inc, t=t, handle='gray')
         plot_frames(filepath, inclination=inc, handle='spec')
 
