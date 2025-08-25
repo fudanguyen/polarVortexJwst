@@ -50,7 +50,7 @@ plotPath = join(homedir, 'plot/')
 # Handles spherical mesh generation and geometric calculations
 # =============================================================================
 class SphericalMesh:
-    def __init__(self, resolution=200, radius=1):
+    def __init__(self, resolution=400, radius=1):
         self.radius = radius
         self.resolution = resolution
         self.phi, self.theta = None, None
@@ -60,6 +60,7 @@ class SphericalMesh:
     def generate_mesh(self):
         """Create spherical grid coordinates"""
         phi = np.linspace(0, np.pi, self.resolution)
+        # phi = np.arccos(np.linspace(1, -1, self.resolution))  # Cosine spacing
         theta = np.linspace(0, 2*np.pi, self.resolution)
         self.phi, self.theta = np.meshgrid(phi, theta)
         
@@ -400,8 +401,7 @@ class AtmosphereVisualizer:
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = specmap.ravel(order='F')
         self.plotter.add_mesh(grid, show_scalar_bar=False,
-                              cmap='viridis',
-                              interpolate_before_map=False)
+                              cmap='viridis')
         
         # Set camera to look at the sphere orthographically
         self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
@@ -427,9 +427,7 @@ class AtmosphereVisualizer:
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
-                              clim=color_lim, 
-                                lighting=False,    # <<< disables lighting/shadows
-                                smooth_shading=False  # <<< disables Gouraud/Phong interpolation
+                              clim=color_lim
         )
         
         # Set camera to look at the sphere orthographically
@@ -448,10 +446,18 @@ class AtmosphereVisualizer:
 # Run the simulation and visualization
 #===============================================================================
 class SimulationRunner:
-    def __init__(self, config, inclinations):
+    def __init__(self, config, inclinations, base_path='output'):
         self.mesh = SphericalMesh()
         self.config = config  # Directly use the provided AtmosphericConfig instance
         self.inclinations = inclinations
+
+        # Get current script directory and create full output path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.base_path = os.path.join(current_dir, base_path)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(self.base_path, exist_ok=True)
+
         self.results = {}
     
     def run_simulation(self, t0=0, t1=60, frames=60, color_lim=[0.0, 1.0]):
@@ -479,25 +485,58 @@ class SimulationRunner:
             results['centroids_specmask'] = centroids
 
             self.results[inclin] = results
+
 # ============================================================================
 # Input output handler and data management
 # ============================================================================
-class DataManager:
-    def __init__(self, base_path='output'):
-        # Get current script directory and create full output path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.base_path = os.path.join(current_dir, base_path)
-        
-        # Create directory if it doesn't exist
-        os.makedirs(self.base_path, exist_ok=True)
-        
-    def save_simulation(self, results, prefix):
+    def save_simulation(self, prefix):
+        results = self.results
         output_path = os.path.join(self.base_path, f'{prefix}.h5')
         with h5py.File(output_path, 'w') as f:
             for inclin, data in results.items():
                 f.create_dataset(f'{inclin}/gray_array', data=np.array(data['gray_array']))
                 f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
                 f.create_dataset(f'{inclin}/metadata', data=str(data['metadata']))
+
+    # ===================================
+    # Convert gray_array to video
+    # ===================================
+    @staticmethod
+    def save_video_from_array(gray_array, filepath, fps=30):
+        import cv2
+        # Ensure frames are uint8
+        frames_uint8 = (np.clip(gray_array, 0, 1) * 255).astype(np.uint8) \
+            if gray_array.dtype != np.uint8 else gray_array
+
+        # Convert RGB to BGR for OpenCV
+        frames_bgr = [cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) for frame in frames_uint8]
+
+        height, width, _ = frames_bgr[0].shape
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
+
+        if not out.isOpened():
+            raise RuntimeError(f"Failed to open VideoWriter: {filepath}")
+
+        for frame in frames_bgr:
+            out.write(frame)
+        out.release()
+
+    def create_videos_from_h5(self, prefix, fps=30):
+        """
+        Create grayscale videos for each inclination stored in an HDF5 file.
+        """
+        h5_file_path = os.path.join(self.base_path, f'{prefix}.h5')
+        base_name = os.path.splitext(os.path.basename(h5_file_path))[0]
+        output_folder = os.path.join(self.base_path, f"{base_name}_video")
+        os.makedirs(output_folder, exist_ok=True)
+
+        with h5py.File(h5_file_path, 'r') as f:
+            for inclin in f.keys():
+                gray_array = f[f'{inclin}/gray_array'][:]
+                video_path = os.path.join(output_folder, f"{base_name}_inclin={inclin}.mp4")
+                self.save_video_from_array(gray_array, video_path, fps=fps)
+
 # ==============================================================================
 # Light curve generation and plotting
 # ==============================================================================
@@ -514,6 +553,8 @@ class LightCurveGenerator:
 # =============================================================================
 
 if __name__ == "__main__":
+    
+    runName = 'test_i60'
 
     # Set up band_config: latitudinal features
     Ppol, Pband = 60, 5  # Periods in hours
@@ -539,17 +580,18 @@ if __name__ == "__main__":
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
-        speckey={'BG':0, 'A': 50, 'B': 100, 'P': 240}
+        speckey={'BG':0, 'A': 50, 'B': 170, 'P': 240}
     )
 
     # Set up the spherical mesh, initialization
-    mesh = SphericalMesh(resolution=200)
+    mesh = SphericalMesh(resolution=400)
     model = AtmosphericModel(mesh, atmo_config)
 
+    incli_array = [60] # List of inclinations to simulate
     # Set up the inclination configuration
     runner = SimulationRunner(
         config=atmo_config,
-        inclinations=[30]
+        inclinations=incli_array
     )
 
     # Run the simulation for a specific time range and number of frames
@@ -557,7 +599,10 @@ if __name__ == "__main__":
     # color_lim sets the color range for spatial visualization
 
     # Save the simulation results
-    DataManager().save_simulation(runner.results, 'simulation_run00')
+    runner.save_simulation(runName)
+
+    # Save a video of simulation results
+    # runner.create_videos_from_h5(runName, fps=6)
 
     # Test the output
     def plot_frames(h5_path, inclination, t=0, handle='gray'):
@@ -570,9 +615,9 @@ if __name__ == "__main__":
                 plt.imshow(data, cmap='viridis')
             plt.show()
 
-    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', 'simulation_run00.h5')
-    for t in range(60):
-        plot_frames(filepath, inclination=30, t=t, handle='gray')
-    
-    plot_frames(filepath, inclination=30, handle='spec')
+    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
+    for inc in incli_array:
+        # for t in range(60):
+            # plot_frames(filepath, inclination=inc, t=t, handle='gray')
+        plot_frames(filepath, inclination=inc, handle='spec')
 
