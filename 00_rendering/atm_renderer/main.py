@@ -22,6 +22,7 @@ print("VTK Version:", vtk.vtkVersion.GetVTKVersion())
 print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 # =============================================================================
 import pyvista as pv
+import cv2
 import tqdm
 import numpy as np
 from numba import jit
@@ -35,6 +36,7 @@ from sklearn.decomposition import PCA
 from datetime import datetime
 import imageio
 from PIL import Image
+from sklearn.cluster import KMeans
 # =============================================================================
 ### Path management
 import os
@@ -132,7 +134,7 @@ class AtmosphericConfig:
         # Periods in hours
         self.Pband = Pband
         self.Ppol = Ppol
-        self.speckey = speckey or {'A': 0.25, 'B': 0.58, 'P': 0.75}
+        self.speckey = speckey or {'BG':0, 'A': 0.25, 'B': 0.58, 'P': 0.75}
         
         self._validate_config()
 
@@ -149,7 +151,7 @@ class AtmosphericConfig:
 # Core atmospheric simulation logic
 # =============================================================================
 class AtmosphericModel:
-    def __init__(self, mesh, config, speckey=None):
+    def __init__(self, mesh, config):
         """
         Args:
             mesh: SphericalMesh object (provides x, y, z coordinates)
@@ -158,7 +160,7 @@ class AtmosphericModel:
         """
         self.mesh = mesh
         self.config = config
-        self.speckey = speckey or {'A': 0.25, 'B': 0.58, 'P': 0.75}
+        self.speckey = config.speckey
         
         # Derived properties from mesh
         self.xsize, self.ysize = self.mesh.shape
@@ -338,10 +340,11 @@ class AtmosphericModel:
 # Visualization of atmospheric data using PyVista
 # =============================================================================
 class AtmosphereVisualizer:
-    def __init__(self, mesh, inclination=0):
+    def __init__(self, mesh, speckey, inclination=0):
         self.mesh = mesh
         self.inclination = inclination
         self.plotter = self._create_plotter()
+        self.speckey = speckey
 
     def _create_plotter(self):
         """Configure PyVista plotter"""
@@ -354,14 +357,51 @@ class AtmosphereVisualizer:
         plotter.camera.SetParallelProjection(True) # Set parallel projection for photometry
         plotter.background_color = 'black' # Set background color to black
         return plotter
-    
-    def render_specmask(self, specmap, color_lim=[0.0, 1.0]):
+
+    def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
+        """Posterize grayscale image using KMeans clustering and remap to speckey values"""
+        target_values = np.array(list(self.speckey.values()), dtype=np.uint8)
+
+        # Flatten to 1D array of intensities
+        pixels = img.ravel()
+
+        # Filter out rare/noisy intensities
+        unique, counts = np.unique(pixels, return_counts=True)
+        valid = unique[counts >= min_count]
+        filtered_pixels = pixels[np.isin(pixels, valid)]
+
+        if filtered_pixels.size == 0:
+            return np.zeros_like(img, dtype=np.uint8), {}
+
+        # Run KMeans on filtered values
+        X = filtered_pixels.reshape(-1, 1)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
+        kmeans.fit(X)
+
+        # Round centroids to nearest integers and sort them
+        centroids = np.sort(np.rint(kmeans.cluster_centers_.flatten()).astype(int))
+
+        # Map sorted centroids to speckey values (smallest->0, next->80, etc.)
+        centroid_map = dict(zip(centroids, target_values))
+
+        # Create output image initialized to 0
+        output_img = np.zeros_like(img, dtype=np.uint8)
+
+        # Apply mapping: within tolerance of centroid -> mapped speckey value
+        for c, mapped_val in centroid_map.items():
+            mask = np.abs(img.astype(int) - int(c)) <= tol
+            output_img[mask] = mapped_val
+
+        return output_img, centroid_map
+
+    def render_specmask(self, specmap, levels=4, color_lim=[0.0, 1.0]):
         """Render spectral mask with full sphere visible"""
         self.plotter.clear()
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = specmap.ravel(order='F')
-        self.plotter.add_mesh(grid, cmap='viridis', show_scalar_bar=False,
-                              clim=color_lim)
+        self.plotter.add_mesh(grid, show_scalar_bar=False,
+                              cmap='viridis',
+                              interpolate_before_map=False)
         
         # Set camera to look at the sphere orthographically
         self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
@@ -373,8 +413,13 @@ class AtmosphereVisualizer:
 
         # Fine-tune the field of view with parallel_scale
         self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
-    
-        return self.plotter.screenshot()
+        # Return black and white
+        screenshot = self.plotter.screenshot()
+        grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
+        # posterize
+        specmask = self.im_posterize(grayscale, tol=20)
+
+        return specmask
 
     def render_frame(self, atmospheric_data, color_lim=[0.0, 1.0]):
         """Render single timestep with full sphere visible"""
@@ -382,7 +427,10 @@ class AtmosphereVisualizer:
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
-                              clim=color_lim)
+                              clim=color_lim, 
+                                lighting=False,    # <<< disables lighting/shadows
+                                smooth_shading=False  # <<< disables Gouraud/Phong interpolation
+        )
         
         # Set camera to look at the sphere orthographically
         self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
@@ -394,7 +442,7 @@ class AtmosphereVisualizer:
 
         # Fine-tune the field of view with parallel_scale
         self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
-    
+
         return self.plotter.screenshot()
 # ==============================================================================
 # Run the simulation and visualization
@@ -410,23 +458,26 @@ class SimulationRunner:
         time_array = np.linspace(t0, t1, frames)
         
         for inclin in self.inclinations:
-            visualizer = AtmosphereVisualizer(self.mesh, inclin)
+            visualizer = AtmosphereVisualizer(self.mesh, self.config.speckey, inclin)
             model = AtmosphericModel(self.mesh, self.config)
             
             results = {
                 'gray_array': [],
                 'metadata': self.config.__dict__,
-                'specmask': [],
+                'specmask': None,
+                'centroids_specmask': None
             }
             
             for t in time_array:
                 atmospheric_data = model.generate_atmosphere(t)
                 specmap = model.generate_specmap()
                 frame = visualizer.render_frame(atmospheric_data, color_lim=color_lim)
-                specmask = visualizer.render_specmask(specmap, color_lim=color_lim)
                 results['gray_array'].append(frame)
-                results['specmask'] = specmask
             
+            specmask, centroids = visualizer.render_specmask(specmap, color_lim=color_lim)
+            results['specmask'] = specmask
+            results['centroids_specmask'] = centroids
+
             self.results[inclin] = results
 # ============================================================================
 # Input output handler and data management
@@ -458,7 +509,6 @@ class LightCurveGenerator:
         """
         self.results = results
 
-
 # ==============================================================================
 # Set up configurations and test call
 # =============================================================================
@@ -467,8 +517,8 @@ if __name__ == "__main__":
 
     # Set up band_config: latitudinal features
     Ppol, Pband = 60, 5  # Periods in hours
-    Fpolar, Fband, Fambient = 0.7, 0.75, 0.4 # amp
-    Fpolar_var, Fband_var, Fambient_var = 0.1, 0.1, 0.00 # variab
+    Fpolar, Fband, Fambient = 1, 1, 1 # amp
+    Fpolar_var, Fband_var, Fambient_var = 0.15, 0.15, 0.00 # variab
     # variability: amp + variab * sin(...)
     bandConfig = [
         # [lat2, lat1, amplitude, type, phase, period]
@@ -489,7 +539,7 @@ if __name__ == "__main__":
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
-        speckey={'A': 0.25, 'B': 0.58, 'P': 0.75}
+        speckey={'BG':0, 'A': 50, 'B': 100, 'P': 240}
     )
 
     # Set up the spherical mesh, initialization
@@ -503,7 +553,7 @@ if __name__ == "__main__":
     )
 
     # Run the simulation for a specific time range and number of frames
-    runner.run_simulation(t0=0, t1=60, frames=60, color_lim=[0.2, 1.0]) 
+    runner.run_simulation(t0=0, t1=60, frames=60, color_lim=[0.5, 1.5]) 
     # color_lim sets the color range for spatial visualization
 
     # Save the simulation results
@@ -517,7 +567,7 @@ if __name__ == "__main__":
                 plt.imshow(data, vmin=0.0, vmax=1.0, cmap='inferno')
             elif handle == 'spec':
                 data = f[f'{inclination}/specmask']
-                plt.imshow(data, vmin=0.3, vmax=0.5, cmap='viridis')
+                plt.imshow(data, cmap='viridis')
             plt.show()
 
     filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', 'simulation_run00.h5')
