@@ -7,4 +7,4 @@ New repo for organization of polarVortex project.
 - Customization for JWST data fitting.
 
 ### Requirements:
-- No large files > 50 MB to smoothly handle git commits. (separate output and input folder.): Use this git primarily for codes and notebooks of routine.
+- pyvista, opencv
