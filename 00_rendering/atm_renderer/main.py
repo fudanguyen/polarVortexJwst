@@ -23,7 +23,7 @@ print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 # =============================================================================
 import pyvista as pv
 import cv2
-import tqdm
+from tqdm import tqdm
 import numpy as np
 from numba import jit
 import matplotlib.pyplot as plt
@@ -34,6 +34,7 @@ from scipy.ndimage import gaussian_filter
 import pandas as pd
 from sklearn.decomposition import PCA
 from datetime import datetime
+import time
 import imageio
 from PIL import Image
 from sklearn.cluster import KMeans
@@ -399,6 +400,9 @@ class AtmosphereVisualizer:
         """Render spectral mask with full sphere visible"""
         self.plotter.clear()
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
+
+        # grid.point_data['scalars'] = np.hstack([specmap, specmap[:, 0:1]]).ravel(order='F')
+
         grid.point_data['scalars'] = specmap.ravel(order='F')
         self.plotter.add_mesh(grid, show_scalar_bar=False, interpolate_before_map=True,
                               cmap='viridis')
@@ -428,7 +432,7 @@ class AtmosphereVisualizer:
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
                               clim=color_lim, interpolate_before_map=True)
-        self.plotter.add_mesh(grid, style="wireframe", color="white")
+        # self.plotter.add_mesh(grid, style="wireframe", color="white")
 
         # Set camera to look at the sphere orthographically
         self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
@@ -442,6 +446,7 @@ class AtmosphereVisualizer:
         self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
 
         return self.plotter.screenshot()
+    
 # ==============================================================================
 # Run the simulation and visualization
 #===============================================================================
@@ -459,9 +464,11 @@ class SimulationRunner:
         os.makedirs(self.base_path, exist_ok=True)
 
         self.results = {}
-    
-    def run_simulation(self, t0=0, t1=60, frames=60, color_lim=[0.0, 1.0]):
-        time_array = np.linspace(t0, t1, frames)
+
+    def run_simulation(self, t0, t1, frames, color_lim=[0.0, 1.0]):
+        start = time.perf_counter()
+
+        time_array = self.config.time_config.time_array
         
         for inclin in self.inclinations:
             visualizer = AtmosphereVisualizer(self.mesh, self.config.speckey, inclin)
@@ -469,22 +476,36 @@ class SimulationRunner:
             
             results = {
                 'gray_array': [],
+                'time_array': [],
                 'metadata': self.config.__dict__,
                 'specmask': None,
                 'centroids_specmask': None
             }
             
-            for t in time_array:
+            for t in tqdm(time_array, desc=f"Inclination {inclin}"):
                 atmospheric_data = model.generate_atmosphere(t)
                 specmap = model.generate_specmap()
                 frame = visualizer.render_frame(atmospheric_data, color_lim=color_lim)
                 results['gray_array'].append(frame)
             
             specmask, centroids = visualizer.render_specmask(specmap, color_lim=color_lim)
+            results['time_array'] = time_array
             results['specmask'] = specmask
             results['centroids_specmask'] = centroids
 
             self.results[inclin] = results
+        
+        # === NEW STEP: generate fluxes ===
+        lc_generator = LightcurveGenerator(self.results)
+        lc_generator.generate_all()
+
+        end = time.perf_counter()
+        print(f"Simulation completed in {end - start:.2f} seconds.")
+
+        # (optional) plot an inclination
+        lc_generator.plot_lightcurves(self.inclinations[0], normalize=True)
+
+        return self.results
 
 # ============================================================================
 # Input output handler and data management
@@ -497,6 +518,8 @@ class SimulationRunner:
                 f.create_dataset(f'{inclin}/gray_array', data=np.array(data['gray_array']))
                 f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
                 f.create_dataset(f'{inclin}/metadata', data=str(data['metadata']))
+                f.create_dataset(f'{inclin}/time_array', data=data['time_array'])
+                f.create_dataset(f'{inclin}/centroids_specmask', data=str(data['centroids_specmask']))
 
     # ===================================
     # Convert gray_array to video
@@ -539,13 +562,102 @@ class SimulationRunner:
 # ==============================================================================
 # Light curve generation and plotting
 # ==============================================================================
-class LightCurveGenerator:
-    def __init__(self, results):
-        """
-        Args:
-            results: Simulation results dictionary from SimulationRunner
-        """
+class LightcurveGenerator:
+    """
+    Compute photometric lightcurves from gray_array and specmask,
+    with vectorized flux calculation for efficiency.
+    """
+
+    def __init__(self, results: dict):
         self.results = results
+
+    def generate_all(self):
+        """Run flux generation for all inclinations in results."""
+        for inclination, data in self.results.items():
+            self.results[inclination]['flux'] = self._generate_flux(data)
+
+    def _generate_flux(self, data: dict) -> dict:
+        """Compute normalized fluxes and area fractions for a single inclination."""
+        # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
+        rgb_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
+        time_array = np.array(data['time_array'])   # (t,)
+        specmask = data['specmask']
+        speckey = data['metadata']['speckey']
+
+        # Frame size (for normalization)
+        frame_height, frame_width = rgb_array.shape[1:3]
+        norm_const = frame_height * frame_width  # total number of pixels per frame
+
+        # Convert RGB → grayscale (weighted average, float32)
+        gray_array = (
+            0.299 * rgb_array[..., 0] +
+            0.587 * rgb_array[..., 1] +
+            0.114 * rgb_array[..., 2]
+        )   # shape (t, h, w), dtype float32
+
+        # Build pixel index arrays for each region (A, B, P only)
+        indices = {
+            region: np.where(specmask == value)
+            for region, value in speckey.items()
+            if region != 'BG'
+        }
+
+        # Precompute area fractions
+        total_area = np.fromiter((len(idx[0]) for idx in indices.values()), dtype=np.int64).sum()
+        area_fractions = {region: len(idx[0]) / total_area for region, idx in indices.items()}
+
+        # Vectorized flux computation (normalized by frame size)
+        fluxes = {}
+        for region, idx in indices.items():
+            # Extract pixel values across all time steps at once
+            flux_region = gray_array[:, idx[0], idx[1]].sum(axis=1)
+            fluxes[f"flux{region}"] = flux_region / norm_const
+
+        # Total flux = sum of region fluxes
+        fluxtotal = np.sum(np.column_stack(list(fluxes.values())), axis=1) / 1.0  # already normalized
+
+        return {
+            'area_fractions': area_fractions,
+            'time': time_array,
+            **fluxes,
+            'fluxtotal': fluxtotal
+        }
+
+    def plot_lightcurves(self, inclination, normalize=False):
+        """
+        Plot lightcurves for a given inclination.
+
+        Parameters
+        ----------
+        inclination : key in results
+            Which inclination's lightcurves to plot.
+        normalize : bool, optional
+            If True, normalize each flux by its maximum value.
+        """
+        flux_data = self.results[inclination].get('flux', None)
+        if flux_data is None:
+            raise ValueError(f"No flux data found for inclination {inclination}. "
+                             "Run generate_all() first.")
+
+        import matplotlib.pyplot as plt
+
+        time = flux_data['time']
+        labels = [k for k in flux_data.keys() if k.startswith("flux")]
+        colors = ['tab:red', 'tab:blue', 'tab:green', 'tab:purple']
+
+        plt.figure(figsize=(8, 5))
+        for label, color in zip(labels, colors):
+            flux = flux_data[label]
+            if normalize and flux.max() > 0:
+                flux = flux / flux_data['fluxtotal'].max()
+            plt.plot(time, flux, label=label, color=color)
+
+        plt.xlabel("Time")
+        plt.ylabel("Intensity" + (" normalized" if normalize else ""))
+        plt.title(f"Lightcurves for inclination {inclination} (degrees)")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
 # ==============================================================================
 # Set up configurations and test call
@@ -553,7 +665,7 @@ class LightCurveGenerator:
 
 if __name__ == "__main__":
     
-    runName = 'test_i60'
+    runName = 'test001'  # Simulation identifier
 
     # Set up band_config: latitudinal features
     Ppol, Pband = 60, 5  # Periods in hours
@@ -575,7 +687,7 @@ if __name__ == "__main__":
         band_config=bandConfig,  # This is your band configuration list
         modu_config='polarStatic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=60),
+        time_config=TimeConfig(t0=0, t1=60, frames=120),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
@@ -583,10 +695,10 @@ if __name__ == "__main__":
     )
 
     # Set up the spherical mesh, initialization
-    mesh = SphericalMesh(resolution=200)
+    mesh = SphericalMesh(resolution=400)
     model = AtmosphericModel(mesh, atmo_config)
 
-    incli_array = [-59] # List of inclinations to simulate
+    incli_array = [40] # List of inclinations to simulate
     # Set up the inclination configuration
     runner = SimulationRunner(
         config=atmo_config,
@@ -594,7 +706,7 @@ if __name__ == "__main__":
     )
 
     # Run the simulation for a specific time range and number of frames
-    runner.run_simulation(t0=0, t1=60, frames=60, color_lim=[0.5, 1.5]) 
+    results = runner.run_simulation(t0=0, t1=60, frames=60, color_lim=[0.5, 1.5]) 
     # color_lim sets the color range for spatial visualization
 
     # Save the simulation results
