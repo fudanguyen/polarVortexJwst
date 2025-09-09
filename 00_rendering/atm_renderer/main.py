@@ -495,12 +495,17 @@ class SimulationRunner:
 
             self.results[inclin] = results
         
-        # === NEW STEP: generate fluxes ===
-        lc_generator = LightcurveGenerator(self.results)
-        lc_generator.generate_all()
-
         end = time.perf_counter()
         print(f"Simulation completed in {end - start:.2f} seconds.")
+
+        # === NEW STEP: generate fluxes ===
+
+        start = time.perf_counter()
+        # Generate lightcurves for all inclinations
+        lc_generator = LightcurveGenerator(self.results)
+        lc_generator.generate_all()
+        end = time.perf_counter()
+        print(f"Lightcurve generated in {end - start:.2f} seconds.")
 
         # (optional) plot an inclination
         lc_generator.plot_lightcurves(self.inclinations[0], normalize=True)
@@ -729,7 +734,7 @@ if __name__ == "__main__":
 
     filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
     for inc in incli_array:
-        for t in range(10):
+        for t in range(2):
             plot_frames(filepath, inclination=inc, t=t, handle='gray')
         plot_frames(filepath, inclination=inc, handle='spec')
 
