@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd # type: ignore
 import astropy.units as u # type: ignore
 import matplotlib.pyplot as plt # type: ignore
+import matplotlib.patches as patches # type: ignore
 import seaborn as sns # type: ignore
 
 import os
@@ -43,6 +44,8 @@ from bokeh.io import output_notebook # type: ignore
 
 output_notebook()
 from bokeh.plotting import show,figure # type: ignore
+from bokeh.models import HoverTool
+from bokeh.palettes import Category10
 
 # ========================= PICASO Sonora Class ==========================
 
@@ -126,7 +129,7 @@ class picasoSonora:
         cloud_tops = [10**(p[i] - dp[i]) for i in range(N_layers)]
         return cloud_tops
     
-    def run_spectrum(self):
+    def run_spectrum(self, plot=True):
         """Run spectrum calculation, do conversion of units,
         and return full dataframe with regridded results."""
         df = self.bd.spectrum(self.opa, full_output=True)
@@ -144,7 +147,14 @@ class picasoSonora:
         x, y = jdi.mean_regrid(1e4 / x, sp.flux, R=R) 
         df['regridy'] = y
         df['regridx'] = x
-        return df, sp
+        sp_regrid = np.array([x,y])
+
+        if plot:
+            show(jpi.spectrum(x, y, plot_width=500, y_axis_type='log',
+                              title=f"Sonora Spectrum: Teff={self.input_spectral['teff']}K, g={self.input_spectral['gravity']}m/s², R={R}",
+                              x_axis_label='Wavelength (micron)', y_axis_label='Fnu (erg/cm²/s/Hz)'),
+                              wave_range=self.input_spectral['wave_range'])
+        return df, sp, sp_regrid
 
     def compute_contribution_function(self, df, plot_cf=True, save_cf=False, savepath=None):
         """Compute and optionally plot/save the contribution function."""
@@ -167,43 +177,12 @@ class picasoSonora:
 
         return CF, pressure_list, wave_list
 
-    def integrate_spectrum(self, CF, pressure_list, wave_list, plevels, 
-                       title=None, plotting=True):
-        """Integrate the contribution function up to specified pressure levels."""
-        # plevels taken from cloud_tops or any pressure levels you want to integrate up to
-        if not isinstance(plevels, list):
-            raise ValueError("plevels must be a list of pressure levels.")
-        if not all(isinstance(p, (int, float)) for p in plevels):
-            raise ValueError("All elements in plevels must be numeric.")
-        
-        # find the closest pressure levels in the pressure_list
-        closest_id = [np.searchsorted(pressure_list, p) for p in plevels]
-        CF_copy = np.flip(CF, axis=1)
-        dlnP = np.diff(np.log(pressure_list)).mean()
-        # integrate contribution function to get p-dependent spectrum
-        # but integration order is from bottom to top pressure
-        cumspec = np.flip(np.cumsum(np.flip(CF_copy, axis=0), axis=0) * dlnP, axis=0)
-        cumspec_list = [cumspec[idx, :] for idx in closest_id]
-        # get the wavelength-out median flux
-        cumspec_median = [np.median(cumspec[idx, :]) for idx in closest_id]
-
-        if plotting:
-            plt.figure(figsize=(8, 6))
-            for i, level in enumerate(plevels):
-                plt.semilogy(wave_list, cumspec_list[i], lw=0.75, label=f'P = {level:.1e} bar')
-            plt.xlabel('Wavelength (um)')
-            plt.ylabel('Flux')
-            plt.title(title if title else 'Cumulative Spectrum Up to Given P')
-            plt.legend()
-
-        return cumspec_list, cumspec_median
-
     def run_with_cloud_config(self, cloud_config, pressure_custom_level=[0.01, 0.1, 1],
-                          add_cloud=True, plot_cf=False, save_cf=False, cloudTop=False):
+                          add_cloud=True, calc_cf=False, save_cf=False, cloudTop=False):
         """Full run, getting pressure-dependent spectrum for a given cloud_config."""
 
         cloud_tops = self.configure_clouds(cloud_config, add_cloud=add_cloud)
-        df, sp = self.run_spectrum()
+        df, sp, sp_regrid = self.run_spectrum(plot=False)
 
         savepath = os.path.join(
             self.input_spectral['database'],
@@ -211,18 +190,116 @@ class picasoSonora:
             f"sonora_t{self.input_spectral['teff']}g{self.input_spectral['gravity']}_R{self.input_spectral['r_resolution']}_cf.npz"
         )
 
-        CF, pressure_list, wave_list = self.compute_contribution_function(
-            df, plot_cf=plot_cf, save_cf=save_cf, savepath=savepath
-        )
+        if calc_cf:
+            CF, pressure_list, wave_list = self.compute_contribution_function(
+                df, plot_cf=True, save_cf=save_cf, savepath=savepath)
+        else:
+            CF, pressure_list, wave_list = None, None, None
 
-        plevels = cloud_tops if cloudTop else pressure_custom_level
-        cumspec_list, cumspec_median = self.integrate_spectrum(
-            CF, pressure_list, wave_list,
-            plevels=plevels,
-            title=f"[Cloud Config] TEFF={self.input_spectral['teff']}K",
-            plotting=False
+        results = {'full': df, 'sp': sp, 'sp_regrid': sp_regrid,
+                   'CF': CF, 'pressure_list': pressure_list, 'wave_list': wave_list}
+
+        return results
+    
+    def plot_cloud_configs(cloud_configs):
+        fig, ax = plt.subplots(figsize=(6, 8))
+
+        # Pick distinct colors from a colormap
+        cmap = plt.cm.viridis
+        colors = [cmap(i / len(cloud_configs)) for i in range(len(cloud_configs))]
+
+        for (i, (name, cfg)) in enumerate(cloud_configs.items()):
+            p = cfg['p'][0]
+            dp = cfg['dp'][0]
+
+            # Cloud boundaries
+            p_bottom = 10**p
+            p_top = 10**(p - dp)
+
+            # Draw rectangle: x spans [i, i+1] just for separation
+            rect = patches.Rectangle(
+                (i, p_top),         # (x, y) lower-left corner
+                0.8,                # width
+                p_bottom - p_top,   # height
+                facecolor=colors[i],
+                alpha=0.6,
+                label=name
+            )
+            ax.add_patch(rect)
+
+        # Set log scale for y-axis
+        ax.set_yscale("log")
+        ax.invert_yaxis()  # high pressure at bottom
+
+        ax.set_ylabel("Pressure [bar]")
+        ax.set_xlabel("Cloud configuration")
+        ax.set_title("Cloud Decks")
+
+        # Use config names as xticks
+        ax.set_xticks([i + 0.4 for i in range(len(cloud_configs))])
+        ax.set_xticklabels(cloud_configs.keys(), rotation=45, ha="right")
+
+        plt.tight_layout()
+        plt.show()
+
+    def plot_allspec(cumspec_results):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        for name, result in cumspec_results.items():
+            sp = result['sp_regrid']
+            wavelength = sp[0]
+            intensity = sp[1]
+
+            ax.plot(wavelength, intensity, label=name)
+
+        ax.set_xlabel("Wavelength")
+        ax.set_ylabel("Intensity")
+        ax.set_title("Cumulative Spectra (sp_regrid)")
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+
+    def plot_allspec_bokeh(cumspec_results):
+        # Make a Bokeh figure
+        p = figure(
+            width=800, height=500,
+            title="Cumulative Spectra (sp_regrid)",
+            x_axis_label="Wavelength (µm)",
+            y_axis_label="Intensity (Fν)",
+            tools="pan,wheel_zoom,box_zoom,reset,save",
+            active_drag="pan",
+            active_scroll="wheel_zoom"
         )
-        return CF, pressure_list, wave_list, cumspec_list, cumspec_median
+        
+        # Color palette
+        colors = Category10[10] if len(cumspec_results) <= 10 else None
+        
+        for i, (name, result) in enumerate(cumspec_results.items()):
+            sp = result['sp_regrid']
+            wavelength = sp[0].flatten()
+            intensity = sp[1].flatten()
+            
+            color = colors[i % 10] if colors else None
+            p.line(wavelength, intensity, line_width=2, legend_label=name, color=color)
+        
+        # Add hover tooltip
+        hover = HoverTool(
+            tooltips=[
+                ("Config", "$name"),
+                ("Wavelength (µm)", "$x"),
+                ("Intensity", "$y")
+            ],
+            mode="vline"
+        )
+        p.add_tools(hover)
+
+        # Legend settings
+        p.legend.click_policy = "hide"  # click to hide/show spectra
+        p.legend.label_text_font_size = "8pt"
+
+        show(p)
+
+
 # ========================= End of PICASO Sonora Class ==========================
 
 #%% ============= Main Polar Vortex v2 Code Testing =============
@@ -253,139 +330,33 @@ physics1 = {
 
 # Initialize physical properties for spectral model
 bd_model = picasoSonora(physics1)
-# Pressure levels for cumulative spectra
+# Pressure levels for output spectra
 pressure_layers = [0.01, 0.1, 1]   
 
-cloud_configs = {
-    'config1': {
-        'p': [-1, 0, 1], # this means 0.1, 1, 10 bar
-        'dp': [np.log10(2)] * 3,
-        'asymetry': [0.9, 0.9, 0.9],
-        'scattering': [0.4, 0.4, 0.4],
-        'tau': [0.1, 0.2, 0.3],
-    },
-    'config2': {
-        'p': [-1.25, 0.25, 1.25], # this cloud deck is slightly more elevated.
-        'dp': [np.log10(2)] * 3,
-        'asymetry': [0.9, 0.9, 0.9],
-        'scattering': [0.4, 0.4, 0.4],
-        'tau': [0.1, 0.2, 0.3],
+# Generate 20 values between 10^-1 and 10^1 in log space,
+# then take log10 so values are between -1 and 1
+p_values = np.linspace(-2, 1, 5)
+
+cloud_configs = {}
+
+for i, p in enumerate(p_values, start=1):
+    cloud_configs[f'config{i}'] = {
+        'p': [p],
+        'dp': [np.log10(2)],
+        'asymetry': [0.9],
+        'scattering': [0.4],
+        'tau': [0.1],
     }
-}
+
+picasoSonora.plot_cloud_configs(cloud_configs)
 
 # Loop through configs and store outputs
-cumspec_results = []
+cumspec_results = {}
 for config_name, cfg in cloud_configs.items():
     print(f"\n=== Running cloud config {config_name} ===")
-    results = bd_model.run_with_cloud_config(
-        cfg, pressure_custom_level=pressure_layers, 
-        add_cloud=True, plot_cf=True, save_cf=False, cloudTop=False)
-    
-    cumspec_results.append({
-        "config_name": config_name,
-        "CF": results[0],
-        "pressure_list": results[1],
-        "wave_list": results[2],
-        "cumspec_list": results[3],
-        "cumspec_median": results[4]
-    })
+    cumspec_results[config_name] = bd_model.run_with_cloud_config(
+        cfg, pressure_custom_level=pressure_layers, calc_cf=False,
+        add_cloud=True, save_cf=False, cloudTop=False)
 
-# function for quick comparison of cloud config results
-def plot_cloud_config_results(cumspec_results, pressure_layers, height=5):
-
-    """
-    Plot cloud configuration results in side-by-side plots.
-
-    Parameters:
-    - cumspec_results: List of dictionaries containing cloud configuration results.
-    - pressure_layers: List of pressure levels used for cumulative spectra.
-    - height: Height of each subplot (default is 5).
-    """
-    num_configs = len(cumspec_results)
-    fig, axes = plt.subplots(1, num_configs, figsize=(height * num_configs, height), constrained_layout=True)
-
-    # Determine global y-axis limits for consistent scaling
-    global_ymin = float('inf')
-    global_ymax = float('-inf')
-
-    # First pass to find global y-axis limits
-    for result in cumspec_results:
-        for spectrum in result["cumspec_list"]:
-            global_ymin = min(global_ymin, spectrum.min())
-            global_ymax = max(global_ymax, spectrum.max())
-
-    # Second pass to plot with consistent y-axis scaling
-    for i, result in enumerate(cumspec_results):
-        # Extract data for the current configuration
-        wave_list = result["wave_list"]
-        cumspec_list = result["cumspec_list"]
-        config_name = result["config_name"]
-
-        # Plot spectra as a function of pressure levels
-        for j, spectrum in enumerate(cumspec_list):
-            # Plot the spectrum
-            axes[i].semilogy(wave_list, spectrum, lw=0.75, label=f'P = {pressure_layers[j]:.1e} bar')
-
-        # Set plot properties
-        axes[i].set_title(f"Spectra: {config_name}")
-        axes[i].set_xlabel("Wavelength (µm)")
-        axes[i].set_ylabel("Flux")
-        axes[i].set_ylim(global_ymin, global_ymax)  # Apply consistent y-axis limits
-        axes[i].legend()
-
-    plt.show()
-
-    # Print out cumspec_median and plevels for each cloud config
-    for result in cumspec_results:
-        config_name = result["config_name"]
-        cumspec_median = result["cumspec_median"]
-
-        print(f"Config: {config_name}")
-        for p, median in zip(pressure_layers, cumspec_median):
-            print(f"  P = {p:.1e} bar, Median Flux = {median:.3e}")
-
-plot_cloud_config_results(cumspec_results, pressure_layers)
-
-#%% ======= Setup 2: Thicker cloud configs starting at the same elevation =======
-
-bd_model = []
-# Initialize physical properties for spectral model
-bd_model = picasoSonora(physics1)
-pressure_layers = [0.01, 0.1, 1]  # Example pressure levels for cumulative spectra 
-
-cloud_configs2 = {
-    'config3': {
-        'p': [-1, 0, 1], # this means 0.1, 1, 10 bar
-        'dp': [np.log10(2)] * 3,
-        'asymetry': [0.9, 0.9, 0.9],
-        'scattering': [0.4, 0.4, 0.4],
-        'tau': [0.1, 0.2, 0.3],
-    },
-    'config4': {
-        'p': [-1, 0, 1], 
-        'dp': [np.log10(4)] * 3, # this cloud deck is twice as thick.
-        'asymetry': [0.9, 0.9, 0.9],
-        'scattering': [0.4, 0.4, 0.4],
-        'tau': [0.1, 0.2, 0.3],
-    }
-}
-
-# Loop through configs and store outputs
-cumspec_results2 = []
-for config_name, cfg in cloud_configs2.items():
-    print(f"\n=== Running cloud config {config_name} ===")
-    results = bd_model.run_with_cloud_config(
-        cfg, pressure_custom_level=pressure_layers, 
-        add_cloud=True, plot_cf=True, save_cf=False, cloudTop=False)
-    
-    cumspec_results2.append({
-        "config_name": config_name,
-        "CF": results[0],
-        "pressure_list": results[1],
-        "wave_list": results[2],
-        "cumspec_list": results[3],
-        "cumspec_median": results[4]
-    })
-
-plot_cloud_config_results(cumspec_results2, pressure_layers)
-# %%
+#%%
+picasoSonora.plot_allspec(cumspec_results)
