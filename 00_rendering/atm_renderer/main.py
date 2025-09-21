@@ -27,8 +27,7 @@ from tqdm import tqdm
 import numpy as np
 from numba import jit
 import matplotlib.pyplot as plt
-from matplotlib import cm
-import matplotlib.animation as animation
+from matplotlib import cm, colors
 import warnings
 from scipy.ndimage import gaussian_filter
 import pandas as pd
@@ -217,8 +216,9 @@ class AtmosphericModel:
             im[mask] = amp
             
             if typ.upper() == 'B':  # Band
+                # im = self._apply_discrete_planetary_wave(im, mask, t, amp, phase, period, variab)
                 im = self._apply_planetary_wave(im, mask, t, amp, phase, period, variab)
-                
+
             elif typ.upper() == 'P':  # Polar
                 im = self._apply_polar_effect(im, mask, t, amp, phase, period, variab)
                 
@@ -243,6 +243,19 @@ class AtmosphericModel:
             2 * np.pi / w * (self.xx + (t / period) * w) + phase * np.pi / 180
         )
         im[mask] += sine_wave[mask]
+        return im
+    
+    def _apply_discrete_planetary_wave(self, im, mask, t, amp, phase, period, variab):
+        w = self.xsize  # longitudinal resolution
+        # Generate continuous sine
+        sine_wave = np.sin(
+            2 * np.pi / w * (self.xx + (t / period) * w) + phase * np.pi / 180)
+        # Convert to discrete (±1)
+        discrete_wave = np.where(sine_wave >= 0, 1.0, -1.0)
+        # Scale by variab (half amplitude span)
+        flux = variab * discrete_wave
+        # Apply only inside band mask
+        im[mask] += flux[mask]
         return im
     
     def _apply_polar_effect(self, im, mask, t, amp, phase, period, variab):
@@ -445,7 +458,10 @@ class AtmosphereVisualizer:
         # Fine-tune the field of view with parallel_scale
         self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
 
-        return self.plotter.screenshot()
+        screenshot = self.plotter.screenshot()
+        grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
+
+        return grayscale
     
 # ==============================================================================
 # Run the simulation and visualization
@@ -465,7 +481,7 @@ class SimulationRunner:
 
         self.results = {}
 
-    def run_simulation(self, t0, t1, frames, color_lim=[0.0, 1.0]):
+    def run_simulation(self, color_lim=[0.0, 1.0]):
         start = time.perf_counter()
 
         time_array = self.config.time_config.time_array
@@ -584,21 +600,14 @@ class LightcurveGenerator:
     def _generate_flux(self, data: dict) -> dict:
         """Compute normalized fluxes and area fractions for a single inclination."""
         # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
-        rgb_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
+        gray_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
         time_array = np.array(data['time_array'])   # (t,)
         specmask = data['specmask']
         speckey = data['metadata']['speckey']
 
         # Frame size (for normalization)
-        frame_height, frame_width = rgb_array.shape[1:3]
+        frame_height, frame_width = gray_array.shape[1:3]
         norm_const = frame_height * frame_width  # total number of pixels per frame
-
-        # Convert RGB → grayscale (weighted average, float32)
-        gray_array = (
-            0.299 * rgb_array[..., 0] +
-            0.587 * rgb_array[..., 1] +
-            0.114 * rgb_array[..., 2]
-        )   # shape (t, h, w), dtype float32
 
         # Build pixel index arrays for each region (A, B, P only)
         indices = {
@@ -670,7 +679,7 @@ class LightcurveGenerator:
 
 if __name__ == "__main__":
     
-    runName = 'test001'  # Simulation identifier
+    runName = 'test_discrete'  # Simulation identifier
 
     # Set up band_config: latitudinal features
     Ppol, Pband = 60, 5  # Periods in hours
@@ -692,7 +701,7 @@ if __name__ == "__main__":
         band_config=bandConfig,  # This is your band configuration list
         modu_config='polarStatic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=120),
+        time_config=TimeConfig(t0=0, t1=60, frames=60),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
@@ -711,7 +720,7 @@ if __name__ == "__main__":
     )
 
     # Run the simulation for a specific time range and number of frames
-    results = runner.run_simulation(t0=0, t1=60, frames=60, color_lim=[0.5, 1.5]) 
+    results = runner.run_simulation(color_lim=[0.5, 1.5]) 
     # color_lim sets the color range for spatial visualization
 
     # Save the simulation results
@@ -720,21 +729,43 @@ if __name__ == "__main__":
     # Save a video of simulation results
     # runner.create_videos_from_h5(runName, fps=6)
 
-    # Test the output
-    def plot_frames(h5_path, inclination, t=0, handle='gray'):
+    bins = [0, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]  # Define bins for digitization
+
+    def plot_frames(h5_path, inclination, t=0, handle='gray', plot_discrete=True, bins=None):
         with h5py.File(h5_path, 'r') as f:
-            if handle == 'gray':
-                data = f[f'{inclination}/gray_array'][t]  # First frame
-                plt.imshow(data, vmin=0.0, vmax=1.0, cmap='inferno')
-            elif handle == 'spec':
-                data = f[f'{inclination}/specmask']
-                plt.imshow(data, cmap='viridis')
+            data = f[f'{inclination}/gray_array'][t]  # Frame at time t
+            spec = f[f'{inclination}/specmask']
+            fig, axes = plt.subplots(1,3, figsize=(15,5))
+            # Original data
+            axes[0].imshow(data, vmin=0, vmax=150, cmap='inferno')
+            # Binned image
+            binned = np.digitize(np.array(data), bins, right=True)
+            axes[1].imshow(binned, cmap='viridis')
+            # Specmask
+            axes[2].imshow(spec, cmap='viridis')
+            plt.tight_layout()
             plt.show()
             plt.close()
 
     filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
     for inc in incli_array:
-        for t in range(2):
-            plot_frames(filepath, inclination=inc, t=t, handle='gray')
-        plot_frames(filepath, inclination=inc, handle='spec')
+        for t in range(5):
+            plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
+
+    ### Plot horizontal colorbar
+    # Normalize bins for colormap
+
+    # Create a colormap
+    cmap = cm.viridis
+    # Create a normalization based on bins
+    norm = colors.Normalize(vmin=0, vmax=150)
+    # Create a ScalarMappable for the colorbar
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    # Plot colorbar
+    fig, ax = plt.subplots(figsize=(8, 1))
+    cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', ticks=bins, boundaries=bins)
+    cbar.ax.set_xticklabels([str(b) for b in bins])
+    plt.show()
+
 
