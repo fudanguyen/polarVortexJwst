@@ -1,2 +1,2 @@
 .DS_Store
-00_rendering/atm_renderer/output/
+00_rendering/atm_renderer/output/*.h5
