@@ -8,6 +8,7 @@ Upgrade from AtmosphereGenerator.py:
 
 @author: nguyendat
 """
+# =============================================================================
 # IMPORT LIBRARIES
 import h5py
 import pickle
