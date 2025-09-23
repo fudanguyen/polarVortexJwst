@@ -369,6 +369,7 @@ cmap = 'inferno'
 frame_no = 60
 t0, t1 = 0,60
 
+### Other options for TESTING
 # frame_no = 30
 # t0, t1 = 0,60
 
