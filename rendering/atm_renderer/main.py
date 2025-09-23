@@ -136,7 +136,7 @@ class AtmosphericConfig:
         # Periods in hours
         self.Pband = Pband
         self.Ppol = Ppol
-        self.speckey = speckey or {'BG':0, 'A': 0.25, 'B': 0.58, 'P': 0.75}
+        self.speckey = speckey or {'BG':0, 'A': 150, 'B': 200, 'P': 250}
         
         self._validate_config()
 
@@ -356,25 +356,33 @@ class AtmosphericModel:
 # Visualization of atmospheric data using PyVista
 # =============================================================================
 class AtmosphereVisualizer:
-    def __init__(self, mesh, speckey, inclination=0):
+    def __init__(self, mesh, speckey, imsize=(300, 300), inclination=0):
         self.mesh = mesh
         self.inclination = inclination
-        self.plotter = self._create_plotter()
         self.speckey = speckey
+        self.imsize = imsize
+        self.plotter = None
 
-    def _create_plotter(self):
-        """Configure PyVista plotter"""
+    def configure_plotter(self, zoom_factor=1.01):
         """Configure PyVista plotter with proper camera setup"""
-        plotter = pv.Plotter(
+        # Close existing plotter if it exists
+        if self.plotter is not None:
+            self.plotter.close()
+            
+        self.plotter = pv.Plotter(
             off_screen=True,
-            window_size=(300, 300),  # Explicit size helps consistency
-            lighting="three lights"  # Better depth perception
+            window_size=self.imsize,  # Explicit size helps consistency
+            lighting='none'  # Remove anisotropy
         )
         
-        plotter.camera.elevation = self.inclination
-        plotter.camera.SetParallelProjection(True) # Set parallel projection for photometry
-        plotter.background_color = 'black' # Set background color to black
-        return plotter
+        self.plotter.camera.SetParallelProjection(True)  # Set parallel projection for photometry
+        self.plotter.camera.elevation = self.inclination + 56  # Adjust for default value
+        self.plotter.background_color = 'black'  # Set background color to black
+
+        # Fine-tune the field of view with parallel_scale
+        self.plotter.camera.parallel_scale = zoom_factor  # Uncommented this line
+        
+        return self.plotter
 
     def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
         """Posterize grayscale image using KMeans clustering and remap to speckey values"""
@@ -410,51 +418,102 @@ class AtmosphereVisualizer:
             mask = np.abs(img.astype(int) - int(c)) <= tol
             output_img[mask] = mapped_val
 
-        return output_img, centroid_map
+        return output_img #, centroid_map
 
-    def render_specmask(self, specmap, levels=4, color_lim=[0.0, 1.0]):
+    def render_specmask(self, specmap, posterize=False):
         """Render spectral mask with full sphere visible"""
-        self.plotter.clear()
+        self.configure_plotter()
+        
+        # Validate mesh dimensions
+        if not hasattr(self.mesh, 'x') or not hasattr(self.mesh, 'y') or not hasattr(self.mesh, 'z'):
+            raise AttributeError("Mesh must have x, y, z attributes")
+            
         grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
-
-        # grid.point_data['scalars'] = np.hstack([specmap, specmap[:, 0:1]]).ravel(order='F')
-
+        
+        # Validate specmap dimensions
+        expected_points = grid.n_points
+        if specmap.size != expected_points:
+            print(f"Warning: specmap size {specmap.size} doesn't match grid points {expected_points}")
+            
         grid.point_data['scalars'] = specmap.ravel(order='F')
+        
+        # set color limits based on specmap range
+        clim = [0,255]
+
+        # Add mesh to plotter
         self.plotter.add_mesh(grid, show_scalar_bar=False, interpolate_before_map=True,
-                              cmap='viridis')
-        
-        # Apply inclination adjustment
-        self.plotter.camera.elevation = self.inclination
+                              cmap='viridis', clim=clim)
+        self.plotter.camera_set = True  # Lock camera after initial setup
 
-        # Fine-tune the field of view with parallel_scale
-        self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
-        # Return black and white
+        # Return grayscale screenshot
         screenshot = self.plotter.screenshot()
+        if screenshot is None or screenshot.size == 0:
+            raise RuntimeError("Screenshot failed - empty or None result")
+            
         grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
-        # posterize
-        specmask = self.im_posterize(grayscale, tol=20)
-
-        return specmask
-
-    def render_frame(self, atmospheric_data, color_lim=[0.0, 1.0]):
-        """Render single timestep with full sphere visible"""
-        self.plotter.clear()
-        grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
-        grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
-        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
-                              clim=color_lim, interpolate_before_map=True)
         
-        # Apply inclination adjustment
-        self.plotter.camera.elevation = self.inclination
+        # Clean up
+        self.plotter.close()
+        self.plotter = None
 
-        # Fine-tune the field of view with parallel_scale
-        self.plotter.camera.parallel_scale = 1.01  # Match this to your desired zoom
+        if posterize: 
+            return self.im_posterize(grayscale, tol=20)
+        else:
+            return grayscale
 
+    def render_frame(self, atmospheric_data, colorlim=[0.0, 1.0]):
+        """Render single timestep with full sphere visible"""
+        # Don't reconfigure plotter if it already exists
+        if self.plotter is None:
+            self.configure_plotter()
+            
+        grid = pv.StructuredGrid(self.mesh.x, self.mesh.y, self.mesh.z)
+        
+        # Validate atmospheric_data dimensions
+        expected_points = grid.n_points
+        if atmospheric_data.size != expected_points:
+            print(f"Warning: atmospheric_data size {atmospheric_data.size} doesn't match grid points {expected_points}")
+            
+        grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
+
+        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
+                              clim=colorlim, interpolate_before_map=True)
+        
+        if not hasattr(self.plotter, 'camera_set') or not self.plotter.camera_set:
+            self.plotter.camera_set = True  # Lock camera after initial setup
+        
         screenshot = self.plotter.screenshot()
+        if screenshot is None or screenshot.size == 0:
+            raise RuntimeError("Screenshot failed - empty or None result")
+            
         grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
 
         return grayscale
     
+    def photometry(self, config, model, inclin, colorlim=[0.0, 1.0]):
+        """Generate photometry images over time"""
+        photometry_array = np.empty((config.time_config.frames, 
+                                    self.imsize[0], self.imsize[1]), dtype=np.float32)
+        time_array = config.time_config.time_array
+        self.configure_plotter()
+
+        try:
+            for i, t in enumerate(tqdm(time_array, desc=f"Inclination {inclin}")):
+                self.plotter.clear()  # Clear previous meshes
+                atmospheric_data = model.generate_atmosphere(t)
+                frame = self.render_frame(atmospheric_data, colorlim)
+                photometry_array[i] = frame
+        finally:
+            if self.plotter is not None:
+                self.plotter.close()
+                self.plotter = None
+
+        return photometry_array
+    
+    def __del__(self):
+        """Ensure plotter is closed when object is deleted"""
+        if hasattr(self, 'plotter') and self.plotter is not None:
+            self.plotter.close()
 # ==============================================================================
 # Run the simulation and visualization
 #===============================================================================
@@ -473,13 +532,16 @@ class SimulationRunner:
 
         self.results = {}
 
-    def run_simulation(self, color_lim=[0.0, 1.0]):
+    def run_simulation(self, colorlim=[0.0, 1.0]):
         start = time.perf_counter()
 
         time_array = self.config.time_config.time_array
         
         for inclin in self.inclinations:
-            visualizer = AtmosphereVisualizer(self.mesh, self.config.speckey, inclin)
+            visualizer = AtmosphereVisualizer(mesh=self.mesh, 
+                                              speckey=self.config.speckey,
+                                              imsize=[300, 300], 
+                                              inclination=inclin)
             model = AtmosphericModel(self.mesh, self.config)
             
             results = {
@@ -490,16 +552,18 @@ class SimulationRunner:
                 'centroids_specmask': None
             }
             
-            for t in tqdm(time_array, desc=f"Inclination {inclin}"):
-                atmospheric_data = model.generate_atmosphere(t)
-                specmap = model.generate_specmap()
-                frame = visualizer.render_frame(atmospheric_data, color_lim=color_lim)
-                results['gray_array'].append(frame)
-            
-            specmask, centroids = visualizer.render_specmask(specmap, color_lim=color_lim)
+            specmap = model.generate_specmap()
+            results['gray_array'] = visualizer.photometry(self.config, model, inclin, colorlim)
+
+            # for t in tqdm(time_array, desc=f"Inclination {inclin}"):
+            #     atmospheric_data = model.generate_atmosphere(t)
+            #     frame = visualizer.render_frame(atmospheric_data, colorlim=colorlim)
+            #     results['gray_array'].append(frame)
+
+            specmask = visualizer.render_specmask(specmap, posterize=False)
             results['time_array'] = time_array
             results['specmask'] = specmask
-            results['centroids_specmask'] = centroids
+            # results['centroids_specmask'] = centroids
 
             self.results[inclin] = results
         
@@ -532,7 +596,7 @@ class SimulationRunner:
                 f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
                 f.create_dataset(f'{inclin}/metadata', data=str(data['metadata']))
                 f.create_dataset(f'{inclin}/time_array', data=data['time_array'])
-                f.create_dataset(f'{inclin}/centroids_specmask', data=str(data['centroids_specmask']))
+                # f.create_dataset(f'{inclin}/centroids_specmask', data=str(data['centroids_specmask']))
 
     # ===================================
     # Convert gray_array to video
@@ -597,30 +661,76 @@ class LightcurveGenerator:
         specmask = data['specmask']
         speckey = data['metadata']['speckey']
 
-        # Frame size (for normalization)
+        # Handle different gray_array formats
+        if len(gray_array.shape) == 4:  # (t, h, w, 3) - RGB
+            # Convert RGB to grayscale
+            gray_array = np.dot(gray_array[..., :3], [0.2989, 0.5870, 0.1140])
+        elif len(gray_array.shape) == 3:  # (t, h, w) - already grayscale
+            pass
+        else:
+            raise ValueError(f"Unexpected gray_array shape: {gray_array.shape}")
+
         frame_height, frame_width = gray_array.shape[1:3]
-        norm_const = frame_height * frame_width  # total number of pixels per frame
+        norm_const = frame_height * frame_width
 
-        # Build pixel index arrays for each region (A, B, P only)
-        indices = {
-            region: np.where(specmask == value)
-            for region, value in speckey.items()
-            if region != 'BG'
-        }
+        # CRITICAL FIX: Use tolerance-based matching for specmask values
+        # The grayscale conversion changes exact spectral values
+        indices = {}
+        tolerance = 50  # Allow some tolerance for matching
+        
+        for region, target_value in speckey.items():
+            if region == 'BG':
+                continue
+                
+            # Find pixels close to the target spectral value
+            mask = np.abs(specmask - target_value) <= tolerance
+            idx = np.where(mask)
+            
+            if len(idx[0]) > 0:
+                indices[region] = idx
+                print(f"Debug - Found {len(idx[0])} pixels for region '{region}' (target: {target_value})")
+            else:
+                print(f"Warning: No pixels found for region '{region}' with target value {target_value}")
+                # Try finding the closest values
+                unique_vals = np.unique(specmask)
+                closest_val = unique_vals[np.argmin(np.abs(unique_vals - target_value))]
+                print(f"  Closest value in specmask: {closest_val}")
 
-        # Precompute area fractions
-        total_area = np.fromiter((len(idx[0]) for idx in indices.values()), dtype=np.int64).sum()
-        area_fractions = {region: len(idx[0]) / total_area for region, idx in indices.items()}
+        if not indices:
+            print("ERROR: No spectral regions found! This indicates a problem with specmask generation.")
+            return {
+                'area_fractions': {},
+                'time': time_array,
+                'fluxtotal': np.zeros(len(time_array))
+            }
 
-        # Vectorized flux computation (normalized by frame size)
+        # Calculate area fractions
+        pixel_counts = {region: len(idx[0]) for region, idx in indices.items()}
+        total_area = sum(pixel_counts.values())
+        
+        if total_area == 0:
+            area_fractions = {region: 0.0 for region in indices.keys()}
+        else:
+            area_fractions = {region: count / total_area for region, count in pixel_counts.items()}
+
+        print(f"Debug - Pixel counts per region: {pixel_counts}")
+        print(f"Debug - Area fractions: {area_fractions}")
+
+        # Vectorized flux computation
         fluxes = {}
         for region, idx in indices.items():
-            # Extract pixel values across all time steps at once
-            flux_region = gray_array[:, idx[0], idx[1]].sum(axis=1)
-            fluxes[f"flux{region}"] = flux_region / norm_const
+            # Extract pixel values across all time steps
+            region_pixels = gray_array[:, idx[0], idx[1]]  # Shape: (time, n_pixels)
+            flux_region = region_pixels.mean(axis=1)  # Average flux per timestep
+            fluxes[f"flux{region}"] = flux_region / norm_const * len(idx[0])  # Scale by region size
 
-        # Total flux = sum of region fluxes
-        fluxtotal = np.sum(np.column_stack(list(fluxes.values())), axis=1) / 1.0  # already normalized
+        # Total flux
+        if fluxes:
+            fluxtotal = sum(fluxes.values())
+        else:
+            fluxtotal = np.zeros(len(time_array))
+
+        print(f"Debug - Generated fluxes for regions: {list(fluxes.keys())}")
 
         return {
             'area_fractions': area_fractions,
@@ -697,7 +807,7 @@ if __name__ == "__main__":
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
-        speckey={'BG':0, 'A': 50, 'B': 170, 'P': 240}
+        speckey= {'BG':0, 'A': 150, 'B': 200, 'P': 250}
     )
 
     # Set up the spherical mesh, initialization
@@ -706,6 +816,7 @@ if __name__ == "__main__":
 
     # incli_array = [40] # List of inclinations to simulate
     incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+    # incli_array = [0]
     # Set up the inclination configuration
     runner = SimulationRunner(
         config=atmo_config,
@@ -713,7 +824,7 @@ if __name__ == "__main__":
     )
 
     # Run the simulation for a specific time range and number of frames
-    results = runner.run_simulation(color_lim=[0.5, 1.5]) 
+    results = runner.run_simulation(colorlim=[0.5, 1.5]) 
     # color_lim sets the color range for spatial visualization
 
     # Save the simulation results
