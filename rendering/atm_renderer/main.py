@@ -367,9 +367,11 @@ class AtmosphereVisualizer:
         """Configure PyVista plotter with proper camera setup"""
         plotter = pv.Plotter(
             off_screen=True,
-            window_size=(1024, 1024),  # Explicit size helps consistency
+            window_size=(300, 300),  # Explicit size helps consistency
             lighting="three lights"  # Better depth perception
         )
+        
+        plotter.camera.elevation = self.inclination
         plotter.camera.SetParallelProjection(True) # Set parallel projection for photometry
         plotter.background_color = 'black' # Set background color to black
         return plotter
@@ -421,11 +423,6 @@ class AtmosphereVisualizer:
         self.plotter.add_mesh(grid, show_scalar_bar=False, interpolate_before_map=True,
                               cmap='viridis')
         
-        # Set camera to look at the sphere orthographically
-        self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
-        self.plotter.camera.focal_point = (0, 0, 0)  # Center of the sphere
-        self.plotter.camera.up = (0, 1, 0)  # Keep north at the top
-        
         # Apply inclination adjustment
         self.plotter.camera.elevation = self.inclination
 
@@ -446,12 +443,6 @@ class AtmosphereVisualizer:
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
         self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
                               clim=color_lim, interpolate_before_map=True)
-        # self.plotter.add_mesh(grid, style="wireframe", color="white")
-
-        # Set camera to look at the sphere orthographically
-        self.plotter.camera.position = (0, 0, 1)  # Distance irrelevant; kept at 1 for syntax
-        self.plotter.camera.focal_point = (0, 0, 0)  # Center of the sphere
-        self.plotter.camera.up = (0, 1, 0)  # Keep north at the top
         
         # Apply inclination adjustment
         self.plotter.camera.elevation = self.inclination
@@ -713,7 +704,8 @@ if __name__ == "__main__":
     mesh = SphericalMesh(resolution=400)
     model = AtmosphericModel(mesh, atmo_config)
 
-    incli_array = [40] # List of inclinations to simulate
+    # incli_array = [40] # List of inclinations to simulate
+    incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
     # Set up the inclination configuration
     runner = SimulationRunner(
         config=atmo_config,
@@ -750,7 +742,7 @@ if __name__ == "__main__":
 
     filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
     for inc in incli_array:
-        for t in range(5):
+        for t in range(1):
             plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
 
     ### Plot horizontal colorbar
