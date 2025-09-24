@@ -582,6 +582,7 @@ class SimulationRunner:
 # Input output handler and data management
 # ============================================================================
     def save_simulation(self, prefix, compression='gzip'):
+        # compression: gzip much smaller filesize than without compression
         results = self.results
         output_path = os.path.join(self.base_path, f'{prefix}.h5')
         with h5py.File(output_path, 'w') as f:
