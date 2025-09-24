@@ -1,4 +1,4 @@
-name: vtk-m-env
+name: vtk-m-env  
 channels:
   - defaults
 dependencies:
