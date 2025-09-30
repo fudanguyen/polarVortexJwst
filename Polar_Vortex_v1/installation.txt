@@ -1,0 +1,5 @@
+# for both python and ipynv files
+
+conda create --name testVtk --channel conda-forge python=3.9 vtk>9.2
+conda activate testVtk
+pip install h5py pyvista scipy matplotlib pandas scikit-learn pillow ipykernel tqdm astropy
