@@ -16,9 +16,9 @@ import pickle
 # from mayavi import mlab
 # =============================================================================
 # Enable vtk-m GPU-backend 
-import vtk
+from vtkmodules.vtkRenderingCore import vtkRenderWindow
 # Create a render window
-render_window = vtk.vtkRenderWindow()
+render_window = vtkRenderWindow()
 
 # Check the rendering backend
 print("Rendering Backend:", render_window.GetRenderingBackend())
@@ -35,7 +35,7 @@ print("Rendering Backend:", render_window.GetRenderingBackend())
 import pyvista as pv
 from tqdm import tqdm
 import numpy as np
-import numba
+# import numba
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.animation as animation
@@ -47,7 +47,7 @@ from sklearn.decomposition import PCA
 from datetime import datetime
 
 # new imports
-import imageio
+# import imageio
 # import cupy as cp
 from PIL import Image
 
