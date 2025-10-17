@@ -1,4 +1,3 @@
-
 """
 PICASO Multiprocessing Grid Runner
 Runs PICASO atmosphere models in parallel across a parameter grid
@@ -63,7 +62,7 @@ def convert_and_regrid(df, R=500):
     x = sp.wave
     y = sp.flux
     df['fluxnu'] = y
-    x, y = jdi.mean_regrid(1e4/x, y, R=R)
+    x, y = jdi.mean_regrid(x, y, R=R)
     df['regridy'] = y
     df['regridx'] = x
     
@@ -111,11 +110,10 @@ def run_single_model(params):
                                                'kzz', 'phase', 'wave_range', 'eq', 'excluded_mol']}
         cloud_params = {k: params[k] for k in ['mh', 'mmw', 'fsed', 'R', 'gases']}
         
-        model_id = params['model_id']
         output_dir = params['output_dir']
         cloudfree = params.get('cloudfree', False)
         
-        print(f"Starting model {model_id}: Teff={atm_params['Teff']}, "
+        print(f"Starting model: Teff={atm_params['Teff']}, "
               f"fsed={cloud_params['fsed']}, gravity={atm_params['gravity']}")
         
         # Configure atmosphere
@@ -123,8 +121,8 @@ def run_single_model(params):
 
         # Initialize result dictionary WITHOUT any file references
         result = {
-            'model_id': model_id,
-            'parameters': params,
+            'model_id': None,
+            'params': params,
         }
         
         if cloudfree:
@@ -136,15 +134,15 @@ def run_single_model(params):
             # Create descriptive filename for cloud-free model
             # Format: bd_[Teff]_[gravity]_[kzz]_cloudfree.nc
             filename = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_cloudfree.nc"
-            cloudfree_file = os.path.join(output_dir, filename)
-            jdi.output_xarray(clf, bd, savefile=cloudfree_file)
-            
+            specname = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_cloudfree.csv"
+            wave, thermal = clf['regridx'], clf['regridy']
+
             # Add to result AFTER creating the file
             result.update({
                 'model_id': filename[:-3],  # Remove .nc for model_id
-                'cloudfree_file': cloudfree_file,
-                'cloudfree_x': clf['regridx'],
-                'cloudfree_y': clf['regridy']
+                'specfile': clf,
+                'wave': wave,
+                'thermal': thermal
             })
         else: 
             # Run cloudy spectrum 
@@ -162,25 +160,39 @@ def run_single_model(params):
             # Create descriptive filename for cloudy model
             # Format: bd_[Teff]_[gravity]_[kzz]_[fsed]_cloudy.nc
             filename = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_{cloud_params['fsed']:.2f}_cloudy.nc"
-            cloudy_file = os.path.join(output_dir, filename)
-            jdi.output_xarray(df_out, bd, savefile=cloudy_file)
-            
+            specname = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_{cloud_params['fsed']:.2f}_cloudy.csv"
+            virganame = f"virga_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_{cloud_params['fsed']:.2f}_cloudy.pkl"
+            wave, thermal = x_cldy, y_cldy
+
             # Add to result AFTER creating the file
             result.update({
                 'model_id': filename[:-3],  # Remove .nc for model_id
-                'cloudy_file': cloudy_file,
-                'cloudy_x': x_cldy,
-                'cloudy_y': y_cldy
+                'specfile': cld_out,
+                'wave': x_cldy,
+                'thermal': y_cldy
             })
+
+        # output spectra
+        spec_file = os.path.join(output_dir, specname)
+        np.savetxt(spec_file, np.column_stack((wave, thermal)), delimiter=",", header="wavelength_um, flux_erg/cm2/s/hz", comments="")
+
+        # output .nc model file
+        model_file = os.path.join(output_dir, filename)
+        jdi.output_xarray(df_out, bd, savefile=model_file)
+
+        # bundle cloud_optics as .pkl file
+        if not cloudfree:
+            results_file = os.path.join(output_dir, virganame)
+            with open(results_file, 'wb') as f:
+                pickle.dump(cld_out, f)
         
-        print(f"Completed model {model_id}")
         return result
         
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
         print(f"Error in model {params.get('model_id', 'unknown')}: {error_msg}")
-        return {'model_id': params.get('model_id'), 'error': error_msg, 'parameters': params}
+        return {'model_id': params.get('model_id'), 'error': error_msg, 'params': params}
     
 # ===========================================================================
 def create_parameter_grid(
@@ -207,14 +219,12 @@ def create_parameter_grid(
     list of dicts : Each dict contains one parameter combination
     """
     param_grid = []
-    model_id = 0
     
     for combo in product(Teff_list, C_to_O_list, mh_list, gravity_list, kzz_list,
                         phase_list, wave_range_list, eq_list, excluded_mol_list,
                         mmw_list, fsed_list, R_list, gases_list):
         
         params = {
-            'model_id': model_id,
             'Teff': combo[0],
             'C_to_O': combo[1],
             'mh': combo[2],
@@ -231,7 +241,6 @@ def create_parameter_grid(
             'cloudfree': cloudfree
         }
         param_grid.append(params)
-        model_id += 1
     
     return param_grid
 
@@ -256,6 +265,7 @@ def run_parallel_grid(parameter_grid, runname='picaso_run', n_processes=None):
     output_dir : str
         Path to output directory
     """
+    time0 = datetime.now()
     if n_processes is None:
         n_processes = max(1, cpu_count() - 1)
     
@@ -287,14 +297,16 @@ def run_parallel_grid(parameter_grid, runname='picaso_run', n_processes=None):
     results_file = os.path.join(output_dir, 'results_summary.pkl')
     with open(results_file, 'wb') as f:
         pickle.dump(results, f)
-    
+
     print(f"\nResults saved to {output_dir}")
     print(f"Configuration saved to {config_file}")
     
     # Print summary
     successful = sum(1 for r in results if 'error' not in r)
     print(f"Completed: {successful}/{len(results)} models successful")
-    
+    stop = datetime.now()
+    print(f"Total time: {stop - time0}")
+
     return results, output_dir
 
 
@@ -310,13 +322,9 @@ def write_config_file(filename, results):
         List of result dictionaries
     """
     with open(filename, 'w') as f:
-        f.write("# PICASO Model Grid Configuration\n")
-        f.write("# Model_ID | Parameters\n")
-        f.write("="*100 + "\n\n")
-        
         for result in results:
             model_id = result['model_id']
-            params = result['parameters']
+            params = result['params']
             
             # Write model ID
             f.write(f"model{model_id}:\n")
@@ -352,7 +360,6 @@ def write_config_file(filename, results):
     
     print(f"Configuration written to {filename}")
 
-
 # ============================================================================
 # EXAMPLE USAGE
 # ============================================================================
@@ -365,9 +372,12 @@ if __name__ == "__main__":
     param_grid = create_parameter_grid(
         Teff_list=[1200],
         C_to_O_list=[0.55],
+        wave_range_list=[[1.5, 5]],
+        R_list=[700],
         gravity_list=[10000],
-        fsed_list=[1, 1.05],
+        fsed_list=[1.0, 1.05, 1.1, 1.15],
         excluded_mol_list=[None],
+        kzz_list=[5e6, 1e7],
         cloudfree=False  # Set to True for cloud-free models only
     )
     
@@ -377,7 +387,7 @@ if __name__ == "__main__":
     results, output_dir = run_parallel_grid(
         param_grid, 
         runname='bd_grid',  # Creates directory like "bd_grid_20241016_143022"
-        n_processes=2  # Adjust based on your CPU
+        n_processes=4  # Adjust based on your CPU
     )
     
     # Example: Load a specific model later
@@ -385,17 +395,55 @@ if __name__ == "__main__":
     print("Example - Loading a saved model:")
     print("="*60)
     
-    import xarray as xr
-    
-    # Load the first cloudfree model
-    if results and 'cloudfree_file' in results[0]:
-        model_file = results[0]['cloudfree_file']
-        print(f"\nLoading: {model_file}")
-        ds = xr.load_dataset(model_file)
-        print(f"Dataset dimensions: {ds.dims}")
-        print(f"Available variables: {list(ds.data_vars)}")
-        
-        # Can reload for new calculations
-        opa_reload = jdi.opannection(wave_range=[1, 3])
-        reuse = jdi.input_xarray(ds, opa_reload, calculation='browndwarf')
-        print("Model successfully reloaded for new calculations!")
+#%% Loading results
+
+    import matplotlib.pyplot as plt
+    import glob
+    from virga import justplotit as vjpi
+    from picaso import justplotit as jpi
+    import xarray 
+
+    ## Plot all spectra from results
+    plt.figure(figsize=(12, 6), dpi=300)
+    for model in results:
+        model_id = model['model_id']
+        x = model['wave']
+        y = model['thermal']
+        plt.plot(x, y, label=model_id)
+
+    plt.xlabel("Wavelength (µm)")
+    plt.ylabel("Flux (erg/cm²/s/Hz)")
+    plt.title("Spectra from Results")
+    plt.yscale('log')
+    plt.legend(fontsize='small')
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+    ## Plot virga cloud optics
+    from bokeh.plotting import show, figure
+    from bokeh.io import output_notebook 
+    output_notebook()
+
+    for model in results[:2]:  # Plot first 2 models only
+        virgadf = model['specfile']
+        print(f"\nPlotting model: {model['model_id']}, fsed={model['params']['fsed']}")
+        p = show(vjpi.all_optics(virgadf))
+
+    ## Load a specific model file, reload and reuse
+    model_file = glob.glob(os.path.join(output_dir, '*.nc'))[0]
+    ds = xarray.load_dataset(model_file)
+    print(f"Dataset dimensions: {ds.dims}")
+    print(f"Available variables: {list(ds.data_vars)}")
+    opa_reload = jdi.opannection(wave_range=[1, 10])
+    reuse = jdi.input_xarray(ds, opa_reload, calculation='browndwarf')
+    ## run gravity
+    gravity_value = os.path.basename(model_file).split('_')[2]
+    reuse.gravity(gravity=float(gravity_value), gravity_unit=u.Unit('m/(s**2)'))
+    print("Model successfully reloaded for new calculations!")
+    sp = reuse.spectrum(opa_reload)
+    sp = convert_and_regrid(sp, R=500)
+
+    p = show(jpi.spectrum(1e4/sp['regridx'], sp['regridy'],
+        plot_height=400, plot_width=700, title="Reloaded Spectrum: "+model_file))
+# %%
