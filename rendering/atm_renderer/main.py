@@ -24,7 +24,7 @@ import pyvista as pv
 import cv2
 from tqdm import tqdm
 import numpy as np
-from numba import jit
+# from numba import jit
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 import warnings
