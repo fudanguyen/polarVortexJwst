@@ -653,6 +653,9 @@ class LightcurveGenerator:
     def _generate_flux(self, data: dict) -> dict:
         """Compute normalized fluxes and area fractions for a single inclination."""
         # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
+        """Compute normalized fluxes and area fractions for a single inclination."""
+        print(f"Debug - type of sum function: {type(sum)}")
+        print(f"Debug - sum function: {sum}")
         gray_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
         time_array = np.array(data['time_array'])   # (t,)
         specmask = data['specmask']
@@ -703,15 +706,17 @@ class LightcurveGenerator:
 
         # Calculate area fractions
         pixel_counts = {region: len(idx[0]) for region, idx in indices.items()}
-        total_area = sum(pixel_counts.values())
+        total_area = __builtins__.sum(pixel_counts.values())  # Explicitly convert to list if needed
+        total_area = int(total_area)  # Force it to be an integer
         
         if total_area == 0:
             area_fractions = {region: 0.0 for region in indices.keys()}
         else:
             area_fractions = {region: count / total_area for region, count in pixel_counts.items()}
 
-        print(f"Debug - Pixel counts per region: {pixel_counts}")
-        print(f"Debug - Area fractions: {area_fractions}")
+        print(f"Debug - pixel_counts: {pixel_counts}")
+        print(f"Debug - pixel_counts.values(): {pixel_counts.values()}")
+        print(f"Debug - type of total_area: {type(total_area)}, value: {total_area}")
 
         # Vectorized flux computation
         fluxes = {}
@@ -723,7 +728,7 @@ class LightcurveGenerator:
 
         # Total flux
         if fluxes:
-            fluxtotal = sum(fluxes.values())
+            fluxtotal = __builtins__.sum(fluxes.values())
         else:
             fluxtotal = np.zeros(len(time_array))
 
@@ -820,7 +825,7 @@ class LightcurveGenerator:
             plt.xlabel("Time (hours)")
             ylabel = "Normalized Intensity" if normalize else "Intensity"
             plt.ylabel(ylabel)
-            plt.title(f"{flux_type.capitalize()} Lightcurves for All Inclinations")
+            plt.title(f"Lightcurves for All Inclinations: [{flux_type}]")
             
             # Create a nice legend
             plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
@@ -946,6 +951,6 @@ if __name__ == "__main__":
     lc_generator.plot_all_inclinations(flux_type='fluxP', normalize=False)
 
     # Compare flux types for specific inclination
-    lc_generator.plot_flux_comparison(inclination=40)
+    # lc_generator.plot_flux_comparison(inclination=40)
 
 
