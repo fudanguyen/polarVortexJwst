@@ -736,102 +736,99 @@ class LightcurveGenerator:
             'fluxtotal': fluxtotal
         }
 
-    def plot_lightcurves(self, inclination, normalize=False):
+    def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, 
+                                figsize=(10, 6), alpha=0.8):
+            """
+            Plot lightcurves for all inclinations on the same plot
+            Parameters
+            ----------
+            flux_type : str, optional
+                Which flux to plot. Options: 'fluxtotal', 'fluxA', 'fluxB', 'fluxP', etc.
+                Default is 'fluxtotal' to show total flux from all regions.
+            normalize : bool, optional
+                If True, normalize each lightcurve by its own maximum value.
+            figsize : tuple, optional
+                Figure size (width, height) in inches.
+            alpha : float, optional
+                Line transparency (0-1).
+            """
+            import matplotlib.pyplot as plt
+            
+            # Check if flux data exists
+            flux_data_available = {inc: self.results[inc].get('flux', None) 
+                                for inc in self.results.keys()}
+            
+            missing_flux = [inc for inc, data in flux_data_available.items() if data is None]
+            if missing_flux:
+                raise ValueError(f"No flux data found for inclinations {missing_flux}. "
+                                "Run generate_all() first.")
 
-def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, 
-                              figsize=(10, 6), alpha=0.8):
-        """
-        Plot lightcurves for all inclinations on the same plot.
+            # Determine available flux types from first inclination
+            first_flux_data = list(flux_data_available.values())[0]
+            available_flux_types = [k for k in first_flux_data.keys() 
+                                if k.startswith('flux') or k == 'fluxtotal']
+            
+            if flux_type not in available_flux_types:
+                raise ValueError(f"Flux type '{flux_type}' not found. "
+                                f"Available types: {available_flux_types}")
 
-        Parameters
-        ----------
-        flux_type : str, optional
-            Which flux to plot. Options: 'fluxtotal', 'fluxA', 'fluxB', 'fluxP', etc.
-            Default is 'fluxtotal' to show total flux from all regions.
-        normalize : bool, optional
-            If True, normalize each lightcurve by its own maximum value.
-        figsize : tuple, optional
-            Figure size (width, height) in inches.
-        alpha : float, optional
-            Line transparency (0-1).
-        """
-        import matplotlib.pyplot as plt
-        
-        # Check if flux data exists
-        flux_data_available = {inc: self.results[inc].get('flux', None) 
-                              for inc in self.results.keys()}
-        
-        missing_flux = [inc for inc, data in flux_data_available.items() if data is None]
-        if missing_flux:
-            raise ValueError(f"No flux data found for inclinations {missing_flux}. "
-                             "Run generate_all() first.")
-
-        # Determine available flux types from first inclination
-        first_flux_data = list(flux_data_available.values())[0]
-        available_flux_types = [k for k in first_flux_data.keys() 
-                               if k.startswith('flux') or k == 'fluxtotal']
-        
-        if flux_type not in available_flux_types:
-            raise ValueError(f"Flux type '{flux_type}' not found. "
-                             f"Available types: {available_flux_types}")
-
-        plt.figure(figsize=figsize)
-        
-        # Sort inclinations for consistent color progression
-        sorted_inclinations = sorted(self.results.keys())
-        
-        # Create color gradient based on inclination
-        colors = plt.cm.plasma(np.linspace(0, 1, len(sorted_inclinations)))
-        
-        # Calculate normalization factor if requested
-        normalization_factor = 1.0
-        if normalize:
-            # Calculate average flux for each inclination (after baseline correction)
-            avg_fluxes = []
-            for inclination in sorted_inclinations:
+            plt.figure(figsize=figsize)
+            
+            # Sort inclinations for consistent color progression
+            sorted_inclinations = sorted(self.results.keys())
+            
+            # Create color gradient based on inclination
+            colors = plt.cm.plasma(np.linspace(0, 1, len(sorted_inclinations)))
+            
+            # Calculate normalization factor if requested
+            normalization_factor = 1.0
+            if normalize:
+                # Calculate average flux for each inclination (after baseline correction)
+                avg_fluxes = []
+                for inclination in sorted_inclinations:
+                    flux_data = self.results[inclination]['flux']
+                    flux = flux_data[flux_type]
+                    
+                    # Apply baseline correction first (shift to same baseline)
+                    flux_corrected = flux - np.min(flux)
+                    avg_flux = np.mean(flux_corrected)
+                    avg_fluxes.append(avg_flux)
+                
+                # Use maximum average flux as normalization factor
+                if avg_fluxes:
+                    normalization_factor = max(avg_fluxes)
+                    print(f"Debug - Average fluxes by inclination (baseline-corrected): {dict(zip(sorted_inclinations, avg_fluxes))}")
+                    print(f"Debug - Normalization factor (max avg): {normalization_factor}")
+            
+            for inclination, color in zip(sorted_inclinations, colors):
                 flux_data = self.results[inclination]['flux']
+                time = flux_data['time']
                 flux = flux_data[flux_type]
                 
-                # Apply baseline correction first (shift to same baseline)
-                flux_corrected = flux - np.min(flux)
-                avg_flux = np.mean(flux_corrected)
-                avg_fluxes.append(avg_flux)
-            
-            # Use maximum average flux as normalization factor
-            if avg_fluxes:
-                normalization_factor = max(avg_fluxes)
-                print(f"Debug - Average fluxes by inclination (baseline-corrected): {dict(zip(sorted_inclinations, avg_fluxes))}")
-                print(f"Debug - Normalization factor (max avg): {normalization_factor}")
-        
-        for inclination, color in zip(sorted_inclinations, colors):
-            flux_data = self.results[inclination]['flux']
-            time = flux_data['time']
-            flux = flux_data[flux_type]
-            
-            # Apply baseline correction (shift to same baseline)
-            flux_shifted = flux - np.min(flux)
-            
-            # Normalize by maximum average flux across all inclinations
-            if normalize and normalization_factor > 0:
-                flux_final = flux_shifted / normalization_factor
-            else:
-                flux_final = flux_shifted
-            
-            plt.plot(time, flux_final, label=f'{inclination}°', 
-                    color=color, alpha=alpha, linewidth=1.5)
+                # Apply baseline correction (shift to same baseline)
+                flux_shifted = flux - np.min(flux)
+                
+                # Normalize by maximum average flux across all inclinations
+                if normalize and normalization_factor > 0:
+                    flux_final = flux_shifted / normalization_factor
+                else:
+                    flux_final = flux_shifted
+                
+                plt.plot(time, flux_final, label=f'{inclination}°', 
+                        color=color, alpha=alpha, linewidth=1.5)
 
-        plt.xlabel("Time (hours)")
-        ylabel = "Normalized Intensity" if normalize else "Intensity"
-        plt.ylabel(ylabel)
-        plt.title(f"{flux_type.capitalize()} Lightcurves for All Inclinations")
-        
-        # Create a nice legend
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
-                  title='Inclination')
-        
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
+            plt.xlabel("Time (hours)")
+            ylabel = "Normalized Intensity" if normalize else "Intensity"
+            plt.ylabel(ylabel)
+            plt.title(f"{flux_type.capitalize()} Lightcurves for All Inclinations")
+            
+            # Create a nice legend
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
+                    title='Inclination')
+            
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.show()
 
 # ==============================================================================
 # Set up configurations and test call
