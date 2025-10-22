@@ -636,12 +636,108 @@ class SimulationRunner:
 # ==============================================================================
 # Light curve generation and plotting
 # ==============================================================================
-# ==============================================================================
-# Light curve generation and plotting
-# ==============================================================================
-# ==============================================================================
-# Light curve generation and plotting
-# ==============================================================================
+class LightcurveGenerator:
+    """
+    Compute photometric lightcurves from gray_array and specmask,
+    with vectorized flux calculation for efficiency.
+    """
+
+    def __init__(self, results: dict):
+        self.results = results
+
+    def generate_all(self):
+        """Run flux generation for all inclinations in results."""
+        for inclination, data in self.results.items():
+            self.results[inclination]['flux'] = self._generate_flux(data)
+
+    def _generate_flux(self, data: dict) -> dict:
+        """Compute normalized fluxes and area fractions for a single inclination."""
+        # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
+        gray_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
+        time_array = np.array(data['time_array'])   # (t,)
+        specmask = data['specmask']
+        speckey = data['metadata']['speckey']
+
+        # Handle different gray_array formats
+        if len(gray_array.shape) == 4:  # (t, h, w, 3) - RGB
+            # Convert RGB to grayscale
+            gray_array = np.dot(gray_array[..., :3], [0.2989, 0.5870, 0.1140])
+        elif len(gray_array.shape) == 3:  # (t, h, w) - already grayscale
+            pass
+        else:
+            raise ValueError(f"Unexpected gray_array shape: {gray_array.shape}")
+
+        frame_height, frame_width = gray_array.shape[1:3]
+        norm_const = frame_height * frame_width
+
+        # CRITICAL FIX: Use tolerance-based matching for specmask values
+        # The grayscale conversion changes exact spectral values
+        indices = {}
+        tolerance = 50  # Allow some tolerance for matching
+        
+        for region, target_value in speckey.items():
+            if region == 'BG':
+                continue
+                
+            # Find pixels close to the target spectral value
+            mask = np.abs(specmask - target_value) <= tolerance
+            idx = np.where(mask)
+            
+            if len(idx[0]) > 0:
+                indices[region] = idx
+                print(f"Debug - Found {len(idx[0])} pixels for region '{region}' (target: {target_value})")
+            else:
+                print(f"Warning: No pixels found for region '{region}' with target value {target_value}")
+                # Try finding the closest values
+                unique_vals = np.unique(specmask)
+                closest_val = unique_vals[np.argmin(np.abs(unique_vals - target_value))]
+                print(f"  Closest value in specmask: {closest_val}")
+
+        if not indices:
+            print("ERROR: No spectral regions found! This indicates a problem with specmask generation.")
+            return {
+                'area_fractions': {},
+                'time': time_array,
+                'fluxtotal': np.zeros(len(time_array))
+            }
+
+        # Calculate area fractions
+        pixel_counts = {region: len(idx[0]) for region, idx in indices.items()}
+        total_area = sum(pixel_counts.values())
+        
+        if total_area == 0:
+            area_fractions = {region: 0.0 for region in indices.keys()}
+        else:
+            area_fractions = {region: count / total_area for region, count in pixel_counts.items()}
+
+        print(f"Debug - Pixel counts per region: {pixel_counts}")
+        print(f"Debug - Area fractions: {area_fractions}")
+
+        # Vectorized flux computation
+        fluxes = {}
+        for region, idx in indices.items():
+            # Extract pixel values across all time steps
+            region_pixels = gray_array[:, idx[0], idx[1]]  # Shape: (time, n_pixels)
+            flux_region = region_pixels.mean(axis=1)  # Average flux per timestep
+            fluxes[f"flux{region}"] = flux_region / norm_const * len(idx[0])  # Scale by region size
+
+        # Total flux
+        if fluxes:
+            fluxtotal = sum(fluxes.values())
+        else:
+            fluxtotal = np.zeros(len(time_array))
+
+        print(f"Debug - Generated fluxes for regions: {list(fluxes.keys())}")
+
+        return {
+            'area_fractions': area_fractions,
+            'time': time_array,
+            **fluxes,
+            'fluxtotal': fluxtotal
+        }
+
+    def plot_lightcurves(self, inclination, normalize=False):
+
 def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, 
                               figsize=(10, 6), alpha=0.8):
         """
