@@ -76,7 +76,7 @@ class SphericalMesh:
 # =============================================================================
 class TimeConfig:
     """Centralized management of temporal parameters"""
-    def __init__(self, t0=0, t1=60, frames=60):
+    def __init__(self, t0=0, t1=60, frames=60, option='full'):
         """
         Args:
             t0: Start time (hours)
@@ -88,11 +88,26 @@ class TimeConfig:
         self.frames = frames
         
         # Derived properties
-        self.time_array = np.linspace(t0, t1, frames)
-        self.dt = (t1 - t0) / frames  # Time step
+        if option == 'full':
+            self.time_array = np.linspace(t0, t1, frames)
+            self.dt = (t1 - t0) / frames  # Time step
         
     def __repr__(self):
-        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames})"
+        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames}, format={option})"
+
+    def to_dict(self):
+        """Convert to JSON-serializable dictionary"""
+        return {
+            't0': self.t0,
+            't1': self.t1,
+            'frames': self.frames,
+            'dt': self.dt
+        }
+    
+    @classmethod
+    def from_dict(cls, d):
+        """Reconstruct from dictionary"""
+        return cls(t0=d['t0'], t1=d['t1'], frames=d['frames'])
 # =============================================================================
 class AtmosphericConfig:
     """Combined atmospheric and temporal configuration"""
@@ -148,6 +163,48 @@ class AtmosphericConfig:
         for band in self.band_config:
             if len(band) != len(required_band_keys):
                 raise ValueError("Invalid band configuration")
+
+    def to_dict(self):
+        """Convert to JSON-serializable dictionary"""
+        return {
+            'band_config': self.band_config,
+            'modu_config': self.modu_config,
+            'modelname': self.modelname,
+            'time_config': self.time_config.to_dict(),  # Nested serialization
+            'Fambient': self.Fambient,
+            'Fambient_var': self.Fambient_var,
+            'Fband': self.Fband,
+            'Fband_var': self.Fband_var,
+            'Fpolar': self.Fpolar,
+            'Fpolar_var': self.Fpolar_var,
+            'Pband': self.Pband,
+            'Ppol': self.Ppol,
+            'speckey': self.speckey
+        }
+    
+    @classmethod
+    def from_dict(cls, d):
+        """Reconstruct from dictionary"""
+        time_config = TimeConfig.from_dict(d['time_config'])
+        return cls(
+            band_config=d['band_config'],
+            modu_config=d['modu_config'],
+            modelname=d['modelname'],
+            time_config=time_config,
+            Fambient=d['Fambient'],
+            Fambient_var=d['Fambient_var'],
+            Fband=d['Fband'],
+            Fband_var=d['Fband_var'],
+            Fpolar=d['Fpolar'],
+            Fpolar_var=d['Fpolar_var'],
+            Pband=d['Pband'],
+            Ppol=d['Ppol'],
+            speckey=d['speckey']
+        )
+    
+    def __repr__(self):
+        return f"AtmosphericConfig(model={self.modelname}, time={self.time_config})"
+
 # ==============================================================================
 # Core atmospheric simulation logic
 # =============================================================================
@@ -854,10 +911,10 @@ if __name__ == "__main__":
     bandConfig = [
         # [lat2, lat1, amplitude, type, phase, period]
         [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
-        [45, 38., Fband, 'B', 10, Pband/2, Fband_var],
-        [25, 15, Fband, 'B', 150, Pband, Fband_var], 
+        # [45, 38., Fband, 'B', 10, Pband/2, Fband_var],
+        [20, 10, Fband, 'B', 150, Pband, Fband_var], 
         [-10, -20, Fband, 'B', -26, Pband, Fband_var],
-        [-33, -40, Fband, 'B', 135, Pband/2, Fband_var],
+        # [-33, -40, Fband, 'B', 135, Pband/2, Fband_var],
         [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
     ]
 

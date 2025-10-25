@@ -414,7 +414,7 @@ if __name__ == "__main__":
     plt.xlabel("Wavelength (µm)")
     plt.ylabel("Flux (erg/cm²/s/Hz)")
     plt.title("Spectra from Results")
-    plt.yscale('log')
+    # plt.yscale('log')
     plt.legend(fontsize='small')
     plt.grid()
     plt.tight_layout()
