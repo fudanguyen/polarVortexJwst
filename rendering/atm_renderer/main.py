@@ -13,6 +13,7 @@ Upgrade from AtmosphereGenerator.py:
 import h5py
 import pickle
 import os
+import json
 # =============================================================================
 # Enable vtk GPU-backend 
 import vtk
@@ -86,6 +87,7 @@ class TimeConfig:
         self.t0 = t0
         self.t1 = t1
         self.frames = frames
+        self.option = option
         
         # Derived properties
         if option == 'full':
@@ -93,15 +95,16 @@ class TimeConfig:
             self.dt = (t1 - t0) / frames  # Time step
         
     def __repr__(self):
-        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames}, format={option})"
+        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames}, format={self.option})"
 
-    def to_dict(self):
+    def _to_dict(self):
         """Convert to JSON-serializable dictionary"""
         return {
             't0': self.t0,
             't1': self.t1,
             'frames': self.frames,
-            'dt': self.dt
+            'dt': self.dt,
+            'option': self.option
         }
     
     @classmethod
@@ -164,13 +167,13 @@ class AtmosphericConfig:
             if len(band) != len(required_band_keys):
                 raise ValueError("Invalid band configuration")
 
-    def to_dict(self):
+    def _to_dict(self):
         """Convert to JSON-serializable dictionary"""
         return {
             'band_config': self.band_config,
             'modu_config': self.modu_config,
             'modelname': self.modelname,
-            'time_config': self.time_config.to_dict(),  # Nested serialization
+            'time_config': self.time_config._to_dict(),  # Nested serialization
             'Fambient': self.Fambient,
             'Fambient_var': self.Fambient_var,
             'Fband': self.Fband,
@@ -551,6 +554,9 @@ class AtmosphereVisualizer:
         grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
 
         return grayscale
+
+    def digitizer(self, img, bins):
+        return None
     
     def photometry(self, config, model, inclin, colorlim=[0.0, 1.0]):
         """Generate photometry images over time"""
@@ -596,7 +602,7 @@ def process_single_inclination(inclin, config, mesh, colorlim):
     return {
         'gray_array': gray_array,
         'time_array': config.time_config.time_array,
-        'metadata': config.__dict__,
+        'metadata': config._to_dict(),
         'specmask': specmask,
     }
 # ==============================================================================
@@ -648,8 +654,10 @@ class SimulationRunner:
                                  data=np.array(data['gray_array']), 
                                  chunks=True, compression=compression)
                 f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
-                f.create_dataset(f'{inclin}/metadata', data=str(data['metadata']))
                 f.create_dataset(f'{inclin}/time_array', data=data['time_array'])
+                # Save metadata as JSON string
+                metadata_json = json.dumps(data['metadata'])
+                f.create_dataset(f'{inclin}/metadata', data=metadata_json)
                 # f.create_dataset(f'{inclin}/centroids_specmask', data=str(data['centroids_specmask']))
 
     # ===================================
@@ -923,7 +931,7 @@ if __name__ == "__main__":
         band_config=bandConfig,  # This is your band configuration list
         modu_config='polarStatic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=120),
+        time_config=TimeConfig(t0=0, t1=60, frames=61, option='full'),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
@@ -931,11 +939,11 @@ if __name__ == "__main__":
     )
 
     # Set up the spherical mesh, initialization
-    mesh = SphericalMesh(resolution=400)
-    model = AtmosphericModel(mesh, atmo_config)
+    # mesh = SphericalMesh(resolution=400)
+    # model = AtmosphericModel(mesh, atmo_config)
 
-    # incli_array = [40] # List of inclinations to simulate
-    incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+    incli_array = [40] # List of inclinations to simulate
+    # incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
     # incli_array = [0]
     # Set up the inclination configuration
     runner = SimulationRunner(
