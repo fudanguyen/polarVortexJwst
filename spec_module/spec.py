@@ -244,7 +244,6 @@ def create_parameter_grid(
     
     return param_grid
 
-
 def run_parallel_grid(parameter_grid, runname='picaso_run', n_processes=None):
     """
     Run PICASO models in parallel across parameter grid.
@@ -309,7 +308,6 @@ def run_parallel_grid(parameter_grid, runname='picaso_run', n_processes=None):
 
     return results, output_dir
 
-
 def write_config_file(filename, results):
     """
     Write configuration file with model parameters.
@@ -368,16 +366,16 @@ if __name__ == "__main__":
     
     print("Setting up parameter grid...")
     
-    # Define parameter grid
+    # Define parameter grid # HAS TO BE LIST
     param_grid = create_parameter_grid(
         Teff_list=[1200],
         C_to_O_list=[0.55],
         wave_range_list=[[1.5, 5]],
         R_list=[700],
         gravity_list=[10000],
-        fsed_list=[1.0, 1.05, 1.1, 1.15],
+        fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
         excluded_mol_list=[None],
-        kzz_list=[5e6, 1e7],
+        kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only
     )
     
@@ -395,7 +393,7 @@ if __name__ == "__main__":
     print("Example - Loading a saved model:")
     print("="*60)
     
-#%% Loading results
+#%% Loading results 
 
     import matplotlib.pyplot as plt
     import glob

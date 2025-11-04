@@ -119,15 +119,16 @@ class AtmosphericConfig:
                  modu_config: str,
                  modelname: str,
                  time_config: TimeConfig,
-                 Fband: float = 0.6,
-                 Fband_var: float = 0.05,
-                 Fambient: float  = 0.5,
-                 Fambient_var: float = 0.00,
-                 Fpolar: float  = 0.7,
-                 Fpolar_var: float = 0.05,
+                 Fband: float = 1,
+                 Fambient: float  = 1,
+                 Fpolar: float  = 1,
                  Pband: float  = 5.0,
                  Ppol: float  = 60.0,
-                 speckey: dict = None):
+                 Fambient_var: float = 0.0,
+                 Fpolar_var: float = 0.05,
+                 Fband_var: float = 0.05,
+                 speckey: dict = None,
+                 colorlim: list = [0.5, 1.5]):
         """
         Args:
             band_config: Atmospheric band parameters
@@ -145,15 +146,17 @@ class AtmosphericConfig:
         self.time_config = time_config
         # Base contrast values
         self.Fambient = Fambient
-        self.Fambient_var = Fambient_var
         self.Fband = Fband
-        self.Fband_var = Fband_var
         self.Fpolar = Fpolar
+        # Variability values
+        self.Fband_var = Fband_var
         self.Fpolar_var = Fpolar_var
+        self.Fambient_var = Fambient_var
         # Periods in hours
         self.Pband = Pband
         self.Ppol = Ppol
         self.speckey = speckey or {'BG':0, 'A': 150, 'B': 200, 'P': 250}
+        self.colorlim = colorlim
         
         self._validate_config()
 
@@ -175,14 +178,15 @@ class AtmosphericConfig:
             'modelname': self.modelname,
             'time_config': self.time_config._to_dict(),  # Nested serialization
             'Fambient': self.Fambient,
-            'Fambient_var': self.Fambient_var,
             'Fband': self.Fband,
-            'Fband_var': self.Fband_var,
             'Fpolar': self.Fpolar,
-            'Fpolar_var': self.Fpolar_var,
             'Pband': self.Pband,
             'Ppol': self.Ppol,
-            'speckey': self.speckey
+            'Fambient_var': self.Fambient_var,
+            'Fband_var': self.Fband_var,
+            'Fpolar_var': self.Fpolar_var,
+            'speckey': self.speckey,
+            'colorlim': self.colorlim
         }
     
     @classmethod
@@ -195,13 +199,13 @@ class AtmosphericConfig:
             modelname=d['modelname'],
             time_config=time_config,
             Fambient=d['Fambient'],
-            Fambient_var=d['Fambient_var'],
             Fband=d['Fband'],
-            Fband_var=d['Fband_var'],
             Fpolar=d['Fpolar'],
-            Fpolar_var=d['Fpolar_var'],
             Pband=d['Pband'],
             Ppol=d['Ppol'],
+            Fambient_var=d['Fambient_var'],
+            Fband_var=d['Fband_var'],
+            Fpolar_var=d['Fpolar_var'],
             speckey=d['speckey']
         )
     
@@ -415,10 +419,11 @@ class AtmosphericModel:
 # Visualization of atmospheric data using PyVista
 # =============================================================================
 class AtmosphereVisualizer:
-    def __init__(self, mesh, speckey, imsize=(300, 300), inclination=0):
+    def __init__(self, mesh, speckey, config, imsize=(300, 300), inclination=0):
         self.mesh = mesh
         self.inclination = inclination
         self.speckey = speckey
+        self.config = config
         self.imsize = imsize
         self.plotter = None
 
@@ -449,43 +454,57 @@ class AtmosphereVisualizer:
         
         return self.plotter
 
-    def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
-        """Posterize grayscale image using KMeans clustering and remap to speckey values"""
-        target_values = np.array(list(self.speckey.values()), dtype=np.uint8)
+    # def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
+    #     """Posterize grayscale image using KMeans clustering and remap to speckey values"""
+    #     target_values = np.array(list(self.speckey.values()), dtype=np.uint8)
 
-        # Flatten to 1D array of intensities
-        pixels = img.ravel()
+    #     # Flatten to 1D array of intensities
+    #     pixels = img.ravel()
 
-        # Filter out rare/noisy intensities
-        unique, counts = np.unique(pixels, return_counts=True)
-        valid = unique[counts >= min_count]
-        filtered_pixels = pixels[np.isin(pixels, valid)]
+    #     # Filter out rare/noisy intensities
+    #     unique, counts = np.unique(pixels, return_counts=True)
+    #     valid = unique[counts >= min_count]
+    #     filtered_pixels = pixels[np.isin(pixels, valid)]
 
-        if filtered_pixels.size == 0:
-            return np.zeros_like(img, dtype=np.uint8), {}
+    #     if filtered_pixels.size == 0:
+    #         return np.zeros_like(img, dtype=np.uint8), {}
 
-        # Run KMeans on filtered values
-        X = filtered_pixels.reshape(-1, 1)
-        kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
-        kmeans.fit(X)
+    #     # Run KMeans on filtered values
+    #     X = filtered_pixels.reshape(-1, 1)
+    #     kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
+    #     kmeans.fit(X)
 
-        # Round centroids to nearest integers and sort them
-        centroids = np.sort(np.rint(kmeans.cluster_centers_.flatten()).astype(int))
+    #     # Round centroids to nearest integers and sort them
+    #     centroids = np.sort(np.rint(kmeans.cluster_centers_.flatten()).astype(int))
 
-        # Map sorted centroids to speckey values (smallest->0, next->80, etc.)
-        centroid_map = dict(zip(centroids, target_values))
+    #     # Map sorted centroids to speckey values (smallest->0, next->80, etc.)
+    #     centroid_map = dict(zip(centroids, target_values))
 
-        # Create output image initialized to 0
-        output_img = np.zeros_like(img, dtype=np.uint8)
+    #     # Create output image initialized to 0
+    #     output_img = np.zeros_like(img, dtype=np.uint8)
 
-        # Apply mapping: within tolerance of centroid -> mapped speckey value
-        for c, mapped_val in centroid_map.items():
-            mask = np.abs(img.astype(int) - int(c)) <= tol
-            output_img[mask] = mapped_val
+    #     # Apply mapping: within tolerance of centroid -> mapped speckey value
+    #     for c, mapped_val in centroid_map.items():
+    #         mask = np.abs(img.astype(int) - int(c)) <= tol
+    #         output_img[mask] = mapped_val
 
-        return output_img #, centroid_map
+    #     return output_img #, centroid_map
 
-    def render_specmask(self, specmap, posterize=False):
+    def im_posterize(self, img):
+        """Posterize grayscale image by mapping to nearest speckey value"""
+        target_values = np.array(sorted(self.speckey.values()), dtype=np.uint8)  # [0, 150, 200, 250]
+        
+        # For each pixel, find the nearest target value
+        img_flat = img.ravel().astype(float)
+        
+        # Vectorized nearest-neighbor assignment
+        distances = np.abs(img_flat[:, np.newaxis] - target_values)
+        nearest_indices = np.argmin(distances, axis=1)
+        output_img = target_values[nearest_indices]
+        
+        return np.array(output_img.reshape(img.shape).astype(np.uint8))
+
+    def render_specmask(self, specmap, posterize=True):
         """Render spectral mask with full sphere visible"""
         self.configure_plotter()
         
@@ -541,7 +560,7 @@ class AtmosphereVisualizer:
             
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
 
-        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
+        self.plotter.add_mesh(grid, cmap='gray', show_scalar_bar=False,
                               clim=colorlim, interpolate_before_map=True)
         
         if not hasattr(self.plotter, 'camera_set') or not self.plotter.camera_set:
@@ -558,8 +577,9 @@ class AtmosphereVisualizer:
     def digitizer(self, img, bins):
         return None
     
-    def photometry(self, config, model, inclin, colorlim=[0.0, 1.0]):
+    def photometry(self, config, model, inclin):
         """Generate photometry images over time"""
+        colorlim = config.colorlim
         photometry_array = np.empty((config.time_config.frames, 
                                     self.imsize[0], self.imsize[1]), dtype=np.float32)
         time_array = config.time_config.time_array
@@ -587,17 +607,18 @@ class AtmosphereVisualizer:
 # Multiprocessing helper function: Needs to be placed outside class
 # ============================================================================
 
-def process_single_inclination(inclin, config, mesh, colorlim):
+def process_single_inclination(inclin, config, mesh):
     """Top-level function for multiprocessing"""
     visualizer = AtmosphereVisualizer(mesh=mesh, 
                                       speckey=config.speckey,
+                                      config=config,
                                       imsize=[300, 300], 
                                       inclination=inclin)
     model = AtmosphericModel(mesh, config)
     
-    gray_array = visualizer.photometry(config, model, inclin, colorlim)
+    gray_array = visualizer.photometry(config, model, inclin)
     specmap = model.generate_specmap()
-    specmask = visualizer.render_specmask(specmap, posterize=False)
+    specmask = visualizer.render_specmask(specmap, posterize=True)
     
     return {
         'gray_array': gray_array,
@@ -624,11 +645,11 @@ class SimulationRunner:
         self.results = {}
 
     # Running the simulation with multiprocessing
-    def run_simulation(self, colorlim=[0.0, 1.0], n_workers=4):
+    def run_simulation(self, colorlim=[0.5, 1.5], n_workers=4):
         from multiprocessing import Pool
         start = time.perf_counter()
         
-        args_list = [(inclin, self.config, self.mesh, colorlim) 
+        args_list = [(inclin, self.config, self.mesh) 
                     for inclin in self.inclinations]
         
         with Pool(processes=n_workers) as pool:
@@ -916,8 +937,11 @@ if __name__ == "__main__":
     Fpolar, Fband, Fambient = 1, 1, 1 # amp
     Fpolar_var, Fband_var, Fambient_var = 0.15, 0.15, 0.00 # variab
     # variability: amp + variab * sin(...)
+    ''' 
+    bandConfig has to be in this format:
+    [latUp, latDown, brightness, type, phase, period, variability] 
+    '''
     bandConfig = [
-        # [lat2, lat1, amplitude, type, phase, period]
         [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
         # [45, 38., Fband, 'B', 10, Pband/2, Fband_var],
         [20, 10, Fband, 'B', 150, Pband, Fband_var], 
@@ -935,12 +959,18 @@ if __name__ == "__main__":
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
-        speckey= {'BG':0, 'A': 150, 'B': 200, 'P': 250}
+        Fambient_var=Fambient_var,
+        Fband_var=Fband_var,
+        Fpolar_var=Fpolar_var,
+        speckey= {'BG':0, 'A': 150, 'B': 200, 'P': 250},
+        colorlim=[0.0, 2.0] # color_lim sets the mapping range from amplitude to [0.255]
     )
 
-    # Set up the spherical mesh, initialization
+    ### Uncomment for testing: Set up the spherical mesh, initialization
     # mesh = SphericalMesh(resolution=400)
     # model = AtmosphericModel(mesh, atmo_config)
+    ## Direct access (works but not ideal)
+    # im2d = model._generate_atmosphere(time=30.0)
 
     incli_array = [40] # List of inclinations to simulate
     # incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
@@ -952,8 +982,7 @@ if __name__ == "__main__":
     )
 
     # Run the simulation for a specific time range and number of frames
-    results = runner.run_simulation(colorlim=[0.5, 1.5]) 
-    # color_lim sets the color range for spatial visualization
+    results = runner.run_simulation() 
 
     # Save the simulation results
     runner.save_simulation(runName)
@@ -961,7 +990,22 @@ if __name__ == "__main__":
     # Save a video of simulation results
     # runner.create_videos_from_h5(runName, fps=6)
 
-    bins = [0, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]  # Define bins for digitization
+#%% Binned image generator and plotter
+    def generate_bins(a, b, nbin, type='linear', power=2):
+        """
+        Generate bins with power-law spacing.
+        """
+        if type == 'linear':
+            bins = np.linspace(a, b, nbin + 1)
+        elif type == 'power':
+            # Generate interior points only (excluding 0 and 1)
+            t = np.linspace(0, 1, nbin)  # Exclude endpoints
+            normalized = t ** power
+            bins = a + normalized * (b - a)
+        return [0] + bins.tolist() + [255]
+
+    # bins = generate_bins(106.25, 143.75, nbin=10, type='power', power=0.9)
+    bins = generate_bins(106.25, 143.75, nbin=10, type='linear')
 
     def plot_frames(h5_path, inclination, t=0, handle='gray', plot_discrete=True, bins=None):
         with h5py.File(h5_path, 'r') as f:
@@ -978,11 +1022,12 @@ if __name__ == "__main__":
             plt.tight_layout()
             plt.show()
             plt.close()
+        return binned
 
     filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
     for inc in incli_array:
-        for t in range(1):
-            plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
+        for t in range(10):
+            binned = plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
 
     ### Plot horizontal colorbar
     # Normalize bins for colormap
@@ -995,25 +1040,27 @@ if __name__ == "__main__":
     sm = cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     # Plot colorbar
-    fig, ax = plt.subplots(figsize=(8, 1))
-    cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', ticks=bins, boundaries=bins)
-    cbar.ax.set_xticklabels([str(b) for b in bins])
+    fig, ax = plt.subplots(figsize=(1,8))
+    cbar = plt.colorbar(sm, cax=ax, orientation='vertical', ticks=bins, boundaries=bins)
+    cbar.ax.set_yticklabels([f'{b:.2f}' for b in bins])
     plt.show()
 
-    # After running your simulation
+    #%% LIGHT CURVE GENERATOR
+
+    ### After running your simulation
     start = time.perf_counter()
     lc_generator = LightcurveGenerator(results)
     lc_generator.generate_all()
     end = time.perf_counter()
     print(f"Lightcurve generated in {end - start:.2f} seconds.")
 
-    # Plot total flux for all inclinations
+    ### Plot total flux for all inclinations
     lc_generator.plot_all_inclinations()
 
-    # Plot regional flux (e.g., bands) for all inclinations  
-    lc_generator.plot_all_inclinations(flux_type='fluxA', normalize=False)
-    lc_generator.plot_all_inclinations(flux_type='fluxB', normalize=False)
-    lc_generator.plot_all_inclinations(flux_type='fluxP', normalize=False)
+    ### Plot regional flux (e.g., bands) for all inclinations  
+    # lc_generator.plot_all_inclinations(flux_type='fluxA', normalize=False)
+    # lc_generator.plot_all_inclinations(flux_type='fluxB', normalize=False)
+    # lc_generator.plot_all_inclinations(flux_type='fluxP', normalize=False)
 
     # Compare flux types for specific inclination
     # lc_generator.plot_flux_comparison(inclination=40)
