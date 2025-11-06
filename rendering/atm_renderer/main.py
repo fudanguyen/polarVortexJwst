@@ -944,8 +944,8 @@ if __name__ == "__main__":
     bandConfig = [
         [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
         # [45, 38., Fband, 'B', 10, Pband/2, Fband_var],
-        [20, 10, Fband, 'B', 150, Pband, Fband_var], 
-        [-10, -20, Fband, 'B', -26, Pband, Fband_var],
+        [20, 10, Fband, 'B', 0, Pband, Fband_var], 
+        [-10, -20, Fband, 'B', 0, Pband, Fband_var],
         # [-33, -40, Fband, 'B', 135, Pband/2, Fband_var],
         [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
     ]
@@ -972,7 +972,7 @@ if __name__ == "__main__":
     ## Direct access (works but not ideal)
     # im2d = model._generate_atmosphere(time=30.0)
 
-    incli_array = [40] # List of inclinations to simulate
+    incli_array = [40, 80] # List of inclinations to simulate
     # incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
     # incli_array = [0]
     # Set up the inclination configuration

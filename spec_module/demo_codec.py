@@ -936,6 +936,7 @@ if __name__ == "__main__":
     # ===== Process Time Series for All Inclination =====
     print("\n### Processing Time Series ###")
     for inclin in results.keys():
+        results_ts = None
         results_ts = codec.process_time_series(
             time_variant_codecs={
                 'cloud_thickness': results[inclin]['digitized']
@@ -972,7 +973,6 @@ if __name__ == "__main__":
 
         # Define wavelength bins
         wavebin = [(2.0, 2.1, 'red'),
-                (2.25, 2.35, 'green'),
                 (2.5, 2.6, 'blue'),]
 
         # Extract light curves for each bin
@@ -1053,47 +1053,48 @@ if __name__ == "__main__":
         plt.savefig(handle, dpi=150, bbox_inches='tight')
         print("\nSaved visualization to ", handle)
         plt.show()
+        plt.close()
 
-    #%%
-    ######## Plot all composite images in a grid (5 columns)
-    n_frames = 60
-    n_cols = 5
-    n_rows = int(np.ceil(n_frames / n_cols))
+        ######## Plot all composite images in a grid (5 columns)
+        n_frames = 60
+        n_cols = 5
+        n_rows = int(np.ceil(n_frames / n_cols))
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4*n_rows))
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4*n_rows))
 
-    # Flatten axes for easier indexing
-    if n_rows == 1:
-        axes = axes.reshape(1, -1)
-    axes_flat = axes.flatten()
+        # Flatten axes for easier indexing
+        if n_rows == 1:
+            axes = axes.reshape(1, -1)
+        axes_flat = axes.flatten()
 
-    # Plot each frame
-    for j in range(n_frames):
-        i = 2*j  # Select every 2nd frame for visibility
-        ax = axes_flat[j]
-        composite = results_ts[i]['composite']
-        frame_idx = results_ts[i]['frame']
-        
-        im = ax.imshow(composite, cmap='viridis', interpolation='nearest')
-        ax.set_title(f'Frame {frame_idx}', fontsize=10)
-        ax.axis('off')
-        
-        # Add colorbar
-        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        # Plot each frame
+        for j in range(n_frames):
+            i = 2*j  # Select every 2nd frame for visibility
+            ax = axes_flat[j]
+            composite = results_ts[i]['composite']
+            frame_idx = results_ts[i]['frame']
+            
+            im = ax.imshow(composite, cmap='viridis', interpolation='nearest')
+            ax.set_title(f'Frame {frame_idx}', fontsize=10)
+            ax.axis('off')
+            
+            # Add colorbar
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-    # Hide unused subplots
-    for i in range(n_frames, len(axes_flat)):
-        axes_flat[i].axis('off')
+        # Hide unused subplots
+        for i in range(n_frames, len(axes_flat)):
+            axes_flat[i].axis('off')
 
-    plt.tight_layout()
-    plt.savefig('all_composite_frames.png', dpi=150, bbox_inches='tight')
-    print(f"Saved all {n_frames} frames to 'all_composite_frames.png'")
-    plt.show()
+        plt.tight_layout()
+        plt.savefig(f'all_composite_frames_i={inclin}.png', dpi=150, bbox_inches='tight')
+        print(f"Saved all {n_frames} frames to 'all_composite_frames.png'")
+        plt.show()
+        plt.close()
 
-    # ===== Summary Statistics =====
-    print("\n### Spectra Information ###")
-    info = codec.get_spectra_info()
-    print(f"Loaded {info['n_spectra']} spectra")
-    print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
-    print(f"Number of wavelength points: {info['n_wavelength_points']}")
+        # ===== Summary Statistics =====
+        print("\n### Spectra Information ###")
+        info = codec.get_spectra_info()
+        print(f"Loaded {info['n_spectra']} spectra")
+        print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
+        print(f"Number of wavelength points: {info['n_wavelength_points']}")
 # %%
