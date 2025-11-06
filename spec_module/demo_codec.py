@@ -940,14 +940,14 @@ if __name__ == "__main__":
             time_variant_codecs={
                 'cloud_thickness': results[inclin]['digitized']
             },
-            frames=range(0, 60),
+            frames=range(0, len(results[inclin]['digitized'])),
             verbose=True)
 
         # ===== NEW: Calculate Composite Spectra for All Frames =====
         print("\n### Calculating Composite Spectra Time Series ###")
         composite_spectra_ts = codec.calculate_composite_spectra_timeseries(
             results_ts,
-            save_dir='none',
+            save_dir=None,
             verbose=True)
 
         # ===== Visualization: Compare Individual vs Composite =====
@@ -978,7 +978,7 @@ if __name__ == "__main__":
         # Extract light curves for each bin
         for wmin, wmax, color in wavebin:
             flux_timeseries = []
-            time_indices = []
+            time_indices = results[inclin]['time_array']
             
             for frame_i, wave_i, flux_i in composite_spectra_ts:
                 # Find wavelength indices in the bin
@@ -988,7 +988,6 @@ if __name__ == "__main__":
                     # Calculate median flux in this bin
                     median_flux = np.median(flux_i[mask])
                     flux_timeseries.append(median_flux)
-                    time_indices.append(frame_i)
             
             # Plot light curve
             ax.plot(time_indices, flux_timeseries, 
@@ -996,8 +995,14 @@ if __name__ == "__main__":
                     linewidth=2, markersize=4,
                     label=f'{wmin}-{wmax} μm')
 
+            # Highlight specific timepoint
+            for xid in [30, 60, 90]:
+                ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
+                        marker='*', markersize=12, color=color)
+
         ax.set_xlabel('Frame Index')
         ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
+
         ax.set_title(f'Light Curves for Selected Wavelength Bins; i={inclin}')
         ax.legend()
         ax.grid(True, alpha=0.3)
@@ -1029,12 +1034,13 @@ if __name__ == "__main__":
         #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
         #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
         
-        frame15, wave15, flux15 = composite_spectra_ts[15]
-        frame30, wave30, flux30 = composite_spectra_ts[30]
-        frame45, wave45, flux45 = composite_spectra_ts[45]
+        frameA, waveA, fluxA = composite_spectra_ts[30]
+        frameB, waveB, fluxB = composite_spectra_ts[60]
+        frameC, waveC, fluxC = composite_spectra_ts[90]
 
-        ax.plot(wave15, flux15/flux30, alpha=1.0, lw=1.5, label=f'Frame 15 / Frame 30')
-        ax.plot(wave15, flux15/flux45, alpha=1.0, lw=1.5, label=f'Frame 15 / Frame 45')
+        ax.plot(waveA, fluxA/fluxB, lw=1, label=f'Frame A / Frame B')
+        ax.plot(waveA, fluxA/fluxC, lw=1, label=f'Frame A / Frame C')
+        ax.plot(waveA, fluxB/fluxC, lw=1, label=f'Frame B / Frame C')
 
         ax.set_xlabel('Wavelength (μm)')
         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
@@ -1050,7 +1056,7 @@ if __name__ == "__main__":
 
     #%%
     ######## Plot all composite images in a grid (5 columns)
-    n_frames = len(results_ts)
+    n_frames = 60
     n_cols = 5
     n_rows = int(np.ceil(n_frames / n_cols))
 
@@ -1062,8 +1068,9 @@ if __name__ == "__main__":
     axes_flat = axes.flatten()
 
     # Plot each frame
-    for i in range(n_frames):
-        ax = axes_flat[i]
+    for j in range(n_frames):
+        i = 2*j  # Select every 2nd frame for visibility
+        ax = axes_flat[j]
         composite = results_ts[i]['composite']
         frame_idx = results_ts[i]['frame']
         
