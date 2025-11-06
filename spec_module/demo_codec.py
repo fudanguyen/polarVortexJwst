@@ -1,3 +1,4 @@
+# demo_codec.py
 import numpy as np
 import json
 import os
@@ -5,6 +6,10 @@ from datetime import datetime
 from collections import Counter
 import itertools
 from scipy.ndimage import zoom
+import h5py as h5 
+import numpy as np
+import matplotlib.pyplot as plt
+import glob
 
 class CodecSystem:
     """
@@ -546,7 +551,216 @@ class CodecSystem:
             print(f"Completed processing {len(frames)} frames")
         
         return results
+
+    # ========== Spectral Loading and Composite Calculation ==========
     
+    def load_spectrum(self, codec_id):
+        """
+        Load spectrum from assigned CSV file for a specific codec ID.
+        
+        Parameters:
+            codec_id (int): Codec ID
+        
+        Returns:
+            tuple: (wavelength, flux) as numpy arrays
+        
+        Raises:
+            ValueError: If no spectrum assigned to this codec_id
+            FileNotFoundError: If file doesn't exist
+        """
+        if codec_id not in self.spectra_assignments:
+            raise ValueError(f"No spectrum assigned to codec_id {codec_id}")
+        
+        filepath = self.spectra_assignments[codec_id]
+        
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Spectrum file not found: {filepath}")
+        
+        # Load CSV (skip header line)
+        data = np.loadtxt(filepath, delimiter=',', skiprows=1)
+        
+        wavelength = data[:, 0]
+        flux = data[:, 1]
+        
+        return wavelength, flux
+
+    def load_all_spectra(self, verbose=True):
+        """
+        Load all assigned spectra into memory.
+        
+        Stores in self.spectra_data = {codec_id: (wavelength, flux), ...}
+        
+        Parameters:
+            verbose (bool): Print loading progress
+        """
+        if not self.spectra_assignments:
+            raise RuntimeError("No spectra assigned. Use assign_spectra() first.")
+        
+        self.spectra_data = {}
+        self.wavelength_grid = None
+        
+        for codec_id in sorted(self.spectra_assignments.keys()):
+            if verbose:
+                print(f"Loading spectrum for codec_id {codec_id}...", end=" ")
+            
+            wavelength, flux = self.load_spectrum(codec_id)
+            self.spectra_data[codec_id] = (wavelength, flux)
+            
+            # Verify wavelength grid consistency
+            if self.wavelength_grid is None:
+                self.wavelength_grid = wavelength
+            else:
+                if not np.allclose(wavelength, self.wavelength_grid):
+                    raise ValueError(
+                        f"Wavelength grid mismatch for codec_id {codec_id}. "
+                        f"All spectra must share the same wavelength grid."
+                    )
+            
+            if verbose:
+                print(f"✓ ({len(wavelength)} points)")
+        
+        if verbose:
+            print(f"\nLoaded {len(self.spectra_data)} spectra")
+            print(f"Wavelength range: {self.wavelength_grid[0]:.3f} - {self.wavelength_grid[-1]:.3f} μm")
+
+    def calculate_composite_spectrum(self, fractions, normalize=False):
+        """
+        Compute weighted sum of spectra based on fractional areas.
+        
+        Parameters:
+            fractions (dict): {codec_id: fractional_area, ...}
+            normalize (bool): If True, normalize fractions to sum to 1.0
+        
+        Returns:
+            tuple: (wavelength, composite_flux) as numpy arrays
+        
+        Example:
+            >>> fractions = codec.calculate_spectral_fractions(composite_image)
+            >>> wave, flux = codec.calculate_composite_spectrum(fractions)
+        """
+        if not hasattr(self, 'spectra_data') or not self.spectra_data:
+            raise RuntimeError("No spectra loaded. Call load_all_spectra() first.")
+        
+        # Handle detailed fractions dict format
+        if isinstance(fractions, dict) and 'fractions' in fractions:
+            fractions = fractions['fractions']
+        
+        # Verify all codec_ids have loaded spectra
+        missing = set(fractions.keys()) - set(self.spectra_data.keys())
+        if missing:
+            raise ValueError(f"Missing spectra for codec_ids: {missing}")
+        
+        # Normalize fractions if requested
+        if normalize:
+            total = sum(fractions.values())
+            if total > 0:
+                fractions = {k: v/total for k, v in fractions.items()}
+        
+        # Initialize composite flux
+        composite_flux = np.zeros_like(self.wavelength_grid)
+        
+        # Weighted sum
+        for codec_id, fraction in fractions.items():
+            _, flux = self.spectra_data[codec_id]
+            composite_flux += fraction * flux
+        
+        return self.wavelength_grid, composite_flux
+
+    def calculate_composite_spectra_timeseries(self, time_series_results, 
+                                            save_dir=None, verbose=True):
+        """
+        Calculate composite spectra for all frames in a time series.
+        
+        Parameters:
+            time_series_results (list): Output from process_time_series()
+            save_dir (str, optional): Directory to save individual spectra
+            verbose (bool): Print progress
+        
+        Returns:
+            list: [(frame_idx, wavelength, flux), ...] for each frame
+        """
+        if not hasattr(self, 'spectra_data') or not self.spectra_data:
+            raise RuntimeError("No spectra loaded. Call load_all_spectra() first.")
+        
+        composite_spectra = []
+        
+        for i, result in enumerate(time_series_results):
+            if verbose and i % 10 == 0:
+                print(f"Computing composite spectrum for frame {i+1}/{len(time_series_results)}")
+            
+            frame_idx = result['frame']
+            fractions = result['fractions']
+            
+            # Calculate composite spectrum
+            wavelength, flux = self.calculate_composite_spectrum(fractions)
+            
+            composite_spectra.append((frame_idx, wavelength, flux))
+            
+            # Optionally save to file
+            if save_dir is not None:
+                os.makedirs(save_dir, exist_ok=True)
+                output_file = os.path.join(save_dir, f"composite_frame_{frame_idx:04d}.csv")
+                np.savetxt(
+                    output_file,
+                    np.column_stack((wavelength, flux)),
+                    delimiter=",",
+                    header="wavelength_um,flux_erg/cm2/s/hz",
+                    comments=""
+                )
+        
+        if verbose:
+            print(f"Computed {len(composite_spectra)} composite spectra")
+            if save_dir:
+                print(f"Saved to: {save_dir}")
+        
+        return composite_spectra
+
+    def save_composite_spectrum(self, wavelength, flux, filepath):
+        """
+        Save composite spectrum to CSV file in the same format as input.
+        
+        Parameters:
+            wavelength (array): Wavelength array
+            flux (array): Flux array
+            filepath (str): Output file path
+        """
+        np.savetxt(
+            filepath,
+            np.column_stack((wavelength, flux)),
+            delimiter=",",
+            header="wavelength_um,flux_erg/cm2/s/hz",
+            comments=""
+        )
+        print(f"Saved composite spectrum to {filepath}")
+
+    def get_spectra_info(self):
+        """
+        Get summary information about loaded spectra.
+        
+        Returns:
+            dict: Summary statistics
+        """
+        if not hasattr(self, 'spectra_data') or not self.spectra_data:
+            return {"status": "No spectra loaded"}
+        
+        # Calculate flux statistics for each spectrum
+        flux_stats = {}
+        for codec_id, (wave, flux) in self.spectra_data.items():
+            flux_stats[codec_id] = {
+                'mean': float(np.mean(flux)),
+                'min': float(np.min(flux)),
+                'max': float(np.max(flux)),
+                'std': float(np.std(flux))
+            }
+        
+        return {
+            'n_spectra': len(self.spectra_data),
+            'n_wavelength_points': len(self.wavelength_grid),
+            'wavelength_range': (float(self.wavelength_grid[0]), 
+                                float(self.wavelength_grid[-1])),
+            'flux_statistics': flux_stats
+        }
+
     # ========== Helper Methods ==========
     
     def _serialize_codec_definitions(self):
@@ -621,13 +835,6 @@ class CodecSystem:
         
         return aligned
 
-# demo_codec.py
-import h5py as h5 
-import numpy as np
-import matplotlib.pyplot as plt
-import json
-import glob
-
 # Import your existing readPhotometry function
 def readPhotometry(targetPath):
     """Read photometry data: gray_array, specmask, metadata, time_array."""
@@ -647,6 +854,8 @@ def generate_bins(a, b, nbin, type='linear', power=2):
     """Generate bins with power-law spacing."""
     if type == 'linear':
         bins = np.linspace(a, b, nbin)
+        bins[0] = bins[0]*0.8 # Slightly extend the first bin
+        bins[-1] = bins[-1]*1.2 # Slightly extend the last bin
     elif type == 'power':
         t = np.linspace(0, 1, nbin)
         normalized = t ** power
@@ -676,7 +885,7 @@ if __name__ == "__main__":
     slope = 255/(cl2 - cl1)
     intercept = 0 - slope * cl1
     a, b = slope*v1 + intercept, slope*v2 + intercept
-    n = 4
+    n = 10
     bins = generate_bins(a, b, nbin=n, type='linear')
     
     digitize_frames(results, bins)
@@ -690,136 +899,194 @@ if __name__ == "__main__":
     codec = CodecSystem()
     
     ### Search for .csv files in the specified directory
-    specpath = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251017_150039/'
-    # csv_files = glob.glob(f"{specpath}/*.csv")
-
+    specpath = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102'
+    csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
     print(f"Found {len(csv_files)} .csv files in {specpath}")
+
     # Add cloud thickness codec
     codec.add_codec_type('cloud_thickness', max_value=n, 
                         description='Cloud optical depth levels')
-    
     # Generate all combinations
     codec.generate_combinations()
     
     # ===== STEP 2: Assign Spectra (Manual) =====
     print("\n### STEP 2: Manual Spectra Assignment ###")
-    print("For demonstration, we'll create dummy assignments:")
-    
-    # In real usage, you would do:
-    # codec.assign_spectra(0, 'path/to/spectra_cloud_1.csv')
-    # codec.assign_spectra(1, 'path/to/spectra_cloud_2.csv')
-    # etc.
-    
-    # For demo, we'll use a pattern (files don't need to exist for demo)
-    # for i in range(n):
-    #     codec.assign_spectra(i, f'spectra/cloud_{i+1}.csv', validate=False)
     
     # Use the provided csv_files for assignment
     for i in range(n):
-        codec.assign_spectra(i, specpath+csv_files[i], validate=True)
-
+        codec.assign_spectra(i, csv_files[i], validate=True)
     print(f"Assigned {len(codec.spectra_assignments)} spectra files")
     
+    # ===== Load all spectra into memory =====
+    print("\n### Loading Spectra ###")
+    codec.load_all_spectra(verbose=True)
+
     # Display first few combinations
     print("\nCodec combinations:")
     for i in range(n):
         codec.print_combination(i)
-    
-    # ===== STEP 3: Create Composite Image (Single Frame) =====
-    print("\n### STEP 3: Create Composite Image ###")
-    frame_idx = 0
-    
-    composite = codec.create_composite_image(
-        cloud_thickness=results['40']['digitized'][frame_idx]
-    )
-    
-    print(f"Composite image shape: {composite.shape}")
-    print(f"Unique codec IDs: {np.unique(composite[~np.isnan(composite)])}")
-    
-    # ===== STEP 4: Calculate Spectral Fractions =====
-    print("\n### STEP 4: Calculate Spectral Fractions ###")
-    fractions = codec.calculate_spectral_fractions(composite, detailed=True)
-    
-    print(f"\nFractional contributions (frame {frame_idx}):")
-    for codec_id, frac in sorted(fractions['fractions'].items()):
-        combo = codec.get_combination(codec_id)
-        print(f"  ID {codec_id} (cloud={combo['cloud_thickness']}): {frac:.4f}")
-    
-    print(f"\nTotal non-background pixels: {fractions['total_pixels']}")
-    print(f"Coverage: {fractions['coverage']:.2%}")
-    
-    # ===== STEP 5: Process Time Series =====
-    print("\n### STEP 5: Process Time Series (first 10 frames) ###")
-    
-    results_ts = codec.process_time_series(
-        time_variant_codecs={
-            'cloud_thickness': results['40']['digitized']
-        },
-        frames=range(10),
-        verbose=False
-    )
-    
-    print(f"Processed {len(results_ts)} frames")
-    print("\nFractions for frame 5:")
-    for codec_id, frac in sorted(results_ts[5]['fractions']['fractions'].items()):
-        print(f"  ID {codec_id}: {frac:.4f}")
-    
-    # ===== STEP 6: Export/Import Configuration =====
-    print("\n### STEP 6: Export Configuration ###")
+
+    # ===== Export/Import Configuration =====
     codec.export_mapping('codec_config.json')
-    
     # Test import
     codec_loaded = CodecSystem()
     codec_loaded.import_mapping('codec_config.json', validate_files=False)
     
-    # ===== STEP 7: Visualization =====
-    print("\n### STEP 7: Visualization ###")
-    
-    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-    
-    # Plot original digitized frames
-    for i in range(3):
-        ax = axes[0, i]
-        im = results['40']['digitized'][i*4]
-        ax.imshow(im, cmap='viridis')
-        ax.set_title(f"Digitized Frame {i*4}")
+    #%%
+    # ===== Process Time Series for All Inclination =====
+    print("\n### Processing Time Series ###")
+    for inclin in results.keys():
+        results_ts = codec.process_time_series(
+            time_variant_codecs={
+                'cloud_thickness': results[inclin]['digitized']
+            },
+            frames=range(0, 60),
+            verbose=True)
+
+        # ===== NEW: Calculate Composite Spectra for All Frames =====
+        print("\n### Calculating Composite Spectra Time Series ###")
+        composite_spectra_ts = codec.calculate_composite_spectra_timeseries(
+            results_ts,
+            save_dir='none',
+            verbose=True)
+
+        # ===== Visualization: Compare Individual vs Composite =====
+        print("\n### Visualizing Spectra ###")
+
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+        # ===== Plot 1: All individual spectra =====
+        ax = axes[0, 0]
+        for codec_id in range(n):  # Plot all codec
+            wave_i, flux_i = codec.load_spectrum(codec_id)
+            ax.plot(wave_i, flux_i, alpha=1, lw=0.5, label=f'Codec {codec_id}')
+        ax.set_xlabel('Wavelength (μm)')
+        ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+        ax.set_title('Individual Spectra')
+        ax.legend()
+        ax.set_yscale('log')
+        ax.grid(True, alpha=0.3)
+
+        # ===== Plot 2: Light curves for specific wavelength bin =====
+        ax = axes[0,1]
+
+        # Define wavelength bins
+        wavebin = [(2.0, 2.1, 'red'),
+                (2.25, 2.35, 'green'),
+                (2.5, 2.6, 'blue'),]
+
+        # Extract light curves for each bin
+        for wmin, wmax, color in wavebin:
+            flux_timeseries = []
+            time_indices = []
+            
+            for frame_i, wave_i, flux_i in composite_spectra_ts:
+                # Find wavelength indices in the bin
+                mask = (wave_i >= wmin) & (wave_i <= wmax)
+                
+                if np.sum(mask) > 0:
+                    # Calculate median flux in this bin
+                    median_flux = np.median(flux_i[mask])
+                    flux_timeseries.append(median_flux)
+                    time_indices.append(frame_i)
+            
+            # Plot light curve
+            ax.plot(time_indices, flux_timeseries, 
+                    marker='o', linestyle='-', color=color, 
+                    linewidth=2, markersize=4,
+                    label=f'{wmin}-{wmax} μm')
+
+        ax.set_xlabel('Frame Index')
+        ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
+        ax.set_title(f'Light Curves for Selected Wavelength Bins; i={inclin}')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('linear')
+
+        # ===== Plot 3: Fractional contributions =====
+
+        # Process a Single Frame for Reference
+        print(f"\n### Processing Single Frame; i={inclin} ###")
+        frame_idx = 0
+        composite = codec.create_composite_image(
+            cloud_thickness=results[inclin]['digitized'][frame_idx]
+        )
+        fractions = codec.calculate_spectral_fractions(composite, detailed=True)
+        # wave, flux = codec.calculate_composite_spectrum(fractions)
+
+        ax = axes[1, 0]
+        codec_ids = list(fractions['fractions'].keys())
+        frac_values = list(fractions['fractions'].values())
+        ax.bar(codec_ids, frac_values)
+        ax.set_xlabel('Codec ID')
+        ax.set_ylabel('Fractional Area')
+        ax.set_title(f'Fractional Contributions (Frame {frame_idx}); i={inclin}')
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # ===== Plot 4: Composite spectra evolution over time =====
+        ax = axes[1, 1]
+        # for i in range(0, len(composite_spectra_ts), 10):  # Every 10th frame
+        #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
+        #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
+        
+        frame15, wave15, flux15 = composite_spectra_ts[15]
+        frame30, wave30, flux30 = composite_spectra_ts[30]
+        frame45, wave45, flux45 = composite_spectra_ts[45]
+
+        ax.plot(wave15, flux15/flux30, alpha=1.0, lw=1.5, label=f'Frame 15 / Frame 30')
+        ax.plot(wave15, flux15/flux45, alpha=1.0, lw=1.5, label=f'Frame 15 / Frame 45')
+
+        ax.set_xlabel('Wavelength (μm)')
+        ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+        ax.set_title(f'Composite Spectra Ratio; i={inclin}')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        handle = f'spectra_analysis_i={inclin}.png'
+        plt.savefig(handle, dpi=150, bbox_inches='tight')
+        print("\nSaved visualization to ", handle)
+        plt.show()
+
+    #%%
+    ######## Plot all composite images in a grid (5 columns)
+    n_frames = len(results_ts)
+    n_cols = 5
+    n_rows = int(np.ceil(n_frames / n_cols))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4*n_rows))
+
+    # Flatten axes for easier indexing
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    axes_flat = axes.flatten()
+
+    # Plot each frame
+    for i in range(n_frames):
+        ax = axes_flat[i]
+        composite = results_ts[i]['composite']
+        frame_idx = results_ts[i]['frame']
+        
+        im = ax.imshow(composite, cmap='viridis', interpolation='nearest')
+        ax.set_title(f'Frame {frame_idx}', fontsize=10)
         ax.axis('off')
-    
-    # Plot composite codec ID images
-    for i in range(3):
-        ax = axes[1, i]
-        composite_i = results_ts[i*4]['composite']
-        im = ax.imshow(composite_i, cmap='gist_rainbow', interpolation='nearest')
-        ax.set_title(f"Codec IDs Frame {i*4}")
-        ax.axis('off')
+        
+        # Add colorbar
         plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    
+
+    # Hide unused subplots
+    for i in range(n_frames, len(axes_flat)):
+        axes_flat[i].axis('off')
+
     plt.tight_layout()
-    plt.savefig('codec_visualization.png', dpi=150, bbox_inches='tight')
-    print("Saved visualization to 'codec_visualization.png'")
+    plt.savefig('all_composite_frames.png', dpi=150, bbox_inches='tight')
+    print(f"Saved all {n_frames} frames to 'all_composite_frames.png'")
     plt.show()
-    
-    # ===== STEP 8: Summary Statistics =====
-    print("\n### STEP 8: Summary Statistics Across Time ###")
-    
-    # Collect all fractions
-    all_fractions = {}
-    for ts_result in results_ts:
-        for codec_id, frac in ts_result['fractions']['fractions'].items():
-            if codec_id not in all_fractions:
-                all_fractions[codec_id] = []
-            all_fractions[codec_id].append(frac)
-    
-    print("\nAverage fractional contributions (first 10 frames):")
-    total = 0
-    for codec_id in sorted(all_fractions.keys()):
-        avg_frac = np.mean(all_fractions[codec_id])
-        combo = codec.get_combination(codec_id)
-        total += avg_frac
-        print(f"  ID {codec_id} (cloud={combo['cloud_thickness']}): {avg_frac:.4f}")
-    
-    if total != 1.0:
-        print(f"\nWARNING: Total average fraction = {total:.4f} (should be ~1.0)")
-    print("\n" + "=" * 60)
-    print("DEMONSTRATION COMPLETE")
-    print("=" * 60)
+
+    # ===== Summary Statistics =====
+    print("\n### Spectra Information ###")
+    info = codec.get_spectra_info()
+    print(f"Loaded {info['n_spectra']} spectra")
+    print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
+    print(f"Number of wavelength points: {info['n_wavelength_points']}")
+# %%
