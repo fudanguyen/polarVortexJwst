@@ -541,7 +541,7 @@ class AtmosphereVisualizer:
         self.plotter = None
 
         if posterize: 
-            return self.im_posterize(specmask_clean, tol=20)
+            return self.im_posterize(specmask_clean)
         else:
             return specmask_clean
 
@@ -955,7 +955,7 @@ if __name__ == "__main__":
         band_config=bandConfig,  # This is your band configuration list
         modu_config='polarStatic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=61, option='full'),
+        time_config=TimeConfig(t0=0, t1=60, frames=120, option='full'),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
