@@ -899,7 +899,9 @@ if __name__ == "__main__":
     codec = CodecSystem()
     
     ### Search for .csv files in the specified directory
-    specpath = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102'
+    dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
+    specpath = dir+'n=10_defaultCondensates_fsed[1-1.18]_1200_10000_1E7'
+    
     csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
     print(f"Found {len(csv_files)} .csv files in {specpath}")
 

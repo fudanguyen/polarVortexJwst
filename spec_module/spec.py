@@ -367,6 +367,20 @@ if __name__ == "__main__":
     print("Setting up parameter grid...")
     
     # Define parameter grid # HAS TO BE LIST
+    ### Different cloud thickness
+    param_grid = create_parameter_grid(
+        Teff_list=[1200],
+        C_to_O_list=[0.55],
+        wave_range_list=[[1.5, 5]],
+        R_list=[700],
+        gravity_list=[10000],
+        fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
+        excluded_mol_list=[None],
+        kzz_list=[1e7],
+        cloudfree=False  # Set to True for cloud-free models only
+    )
+
+    # Alternate grid playing with clouds condensates option
     param_grid = create_parameter_grid(
         Teff_list=[1200],
         C_to_O_list=[0.55],
@@ -379,6 +393,19 @@ if __name__ == "__main__":
         cloudfree=False  # Set to True for cloud-free models only
     )
     
+    ### Different condensates inclusion
+    param_grid = create_parameter_grid(
+        Teff_list=[1200],
+        C_to_O_list=[0.55],
+        wave_range_list=[[1.5, 5]],
+        R_list=[700],
+        gravity_list=[10000],
+        fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
+        excluded_mol_list=[None],
+        kzz_list=[1e7],
+        cloudfree=False  # Set to True for cloud-free models only
+    )
+
     print(f"Total models to run: {len(param_grid)}")
     
     # Run the grid

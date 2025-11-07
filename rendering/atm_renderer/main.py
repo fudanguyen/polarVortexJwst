@@ -274,6 +274,7 @@ class AtmosphericModel:
             lat2, lat1, amp, typ, phase, period, variab = group
             lat_px1 = self._lat_px(lat1)
             lat_px2 = self._lat_px(lat2)
+            wavenumber = self.config.Pband / period
             
             # Vectorized latitude mask
             mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
@@ -281,7 +282,7 @@ class AtmosphericModel:
             
             if typ.upper() == 'B':  # Band
                 # im = self._apply_discrete_planetary_wave(im, mask, t, amp, phase, period, variab)
-                im = self._apply_planetary_wave(im, mask, t, amp, phase, period, variab)
+                im = self._apply_planetary_wave(im, mask, t, amp, phase, period, variab, wavenumber)
 
             elif typ.upper() == 'P':  # Polar
                 im = self._apply_polar_effect(im, mask, t, amp, phase, period, variab)
@@ -299,27 +300,14 @@ class AtmosphericModel:
         """Convert latitude to pixel coordinate (vectorized)"""
         return np.abs(lat_deg - 90) / 180 * self.ysize
     
-    def _apply_planetary_wave(self, im, mask, t, amp, phase, period, variab):
+    def _apply_planetary_wave(self, im, mask, t, amp, phase, period, variab, wavenumber):
         """Vectorized planetary wave implementation"""
         # Spatial frequency (1/wavelength)
-        w = self.xsize  # Full circumference resolution
+        w = self.xsize / wavenumber  # Full circumference resolution
         sine_wave = variab * np.sin(
             2 * np.pi / w * (self.xx + (t / period) * w) + phase * np.pi / 180
         )
         im[mask] += sine_wave[mask]
-        return im
-    
-    def _apply_discrete_planetary_wave(self, im, mask, t, amp, phase, period, variab):
-        w = self.xsize  # longitudinal resolution
-        # Generate continuous sine
-        sine_wave = np.sin(
-            2 * np.pi / w * (self.xx + (t / period) * w) + phase * np.pi / 180)
-        # Convert to discrete (±1)
-        discrete_wave = np.where(sine_wave >= 0, 1.0, -1.0)
-        # Scale by variab (half amplitude span)
-        flux = variab * discrete_wave
-        # Apply only inside band mask
-        im[mask] += flux[mask]
         return im
     
     def _apply_polar_effect(self, im, mask, t, amp, phase, period, variab):
@@ -869,7 +857,7 @@ class LightcurveGenerator:
             sorted_inclinations = sorted(self.results.keys())
             
             # Create color gradient based on inclination
-            colors = plt.cm.plasma(np.linspace(0, 1, len(sorted_inclinations)))
+            colors = plt.cm.gist_rainbow(np.linspace(0, 1, len(sorted_inclinations)))
             
             # Calculate normalization factor if requested
             normalization_factor = 1.0
@@ -943,10 +931,10 @@ if __name__ == "__main__":
     '''
     bandConfig = [
         [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
-        # [45, 38., Fband, 'B', 10, Pband/2, Fband_var],
-        [20, 10, Fband, 'B', 0, Pband, Fband_var], 
-        [-10, -20, Fband, 'B', 0, Pband, Fband_var],
-        # [-33, -40, Fband, 'B', 135, Pband/2, Fband_var],
+        [37, 30., Fband, 'B', 0, Pband/2, Fband_var],
+        [15, 5, Fband, 'B', 30, Pband, Fband_var], 
+        [-5, -15, Fband, 'B', 0, Pband, Fband_var],
+        [-30, -37, Fband, 'B', 30, Pband/2, Fband_var],
         [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
     ]
 
@@ -988,7 +976,7 @@ if __name__ == "__main__":
     runner.save_simulation(runName)
 
     # Save a video of simulation results
-    # runner.create_videos_from_h5(runName, fps=6)
+    runner.create_videos_from_h5(runName, fps=6)
 
 #%% Binned image generator and plotter
     def generate_bins(a, b, nbin, type='linear', power=2):
@@ -1024,10 +1012,11 @@ if __name__ == "__main__":
             plt.close()
         return binned
 
-    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
-    for inc in incli_array:
-        for t in range(10):
-            binned = plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
+    if False:
+        filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
+        for inc in incli_array:
+            for t in range(10):
+                binned = plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
 
     ### Plot horizontal colorbar
     # Normalize bins for colormap
