@@ -208,7 +208,7 @@ def create_parameter_grid(
     mmw_list=[2.2],
     fsed_list=[1],
     R_list=[500],
-    gases_list=[['Fe', 'MgSiO3', 'Mg2SiO4', 'Al2O3']],
+    gases_list=[['Fe', 'MgSiO3', 'Mg2SiO4', 'Al2O3', 'Na2S']],
     cloudfree=False
 ):
     """
@@ -366,34 +366,51 @@ if __name__ == "__main__":
     
     print("Setting up parameter grid...")
     
-    # Define parameter grid # HAS TO BE LIST
-    ### Different cloud thickness
-    param_grid = create_parameter_grid(
-        Teff_list=[1200],
-        C_to_O_list=[0.55],
-        wave_range_list=[[1.5, 5]],
-        R_list=[700],
-        gravity_list=[10000],
-        fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
-        excluded_mol_list=[None],
-        kzz_list=[1e7],
-        cloudfree=False  # Set to True for cloud-free models only
-    )
+    ### Define parameter grid # HAS TO BE LIST
+    ### Different cloud thickness, all condensates
+    # param_grid = create_parameter_grid(
+    #     Teff_list=[1200],
+    #     C_to_O_list=[0.55],
+    #     wave_range_list=[[1.5, 5]],
+    #     R_list=[700],
+    #     gravity_list=[10000],
+    #     fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
+    #     excluded_mol_list=[None],
+    #     gases_list=[['Fe', 'Al2O3', 'MgSiO3', 'Mg2SiO4', 'Na2S']],
+    #     kzz_list=[1e7],
+    #     cloudfree=False  # Set to True for cloud-free models only
+    # )
 
-    # Alternate grid playing with clouds condensates option
-    param_grid = create_parameter_grid(
-        Teff_list=[1200],
-        C_to_O_list=[0.55],
-        wave_range_list=[[1.5, 5]],
-        R_list=[700],
-        gravity_list=[10000],
-        fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
-        excluded_mol_list=[None],
-        kzz_list=[1e7],
-        cloudfree=False  # Set to True for cloud-free models only
-    )
+    ### Alternate grid playing with clouds condensates option
+    ### No SiO3
+    # param_grid = create_parameter_grid(
+    #     Teff_list=[1200],
+    #     C_to_O_list=[0.55],
+    #     wave_range_list=[[1.5, 5]],
+    #     R_list=[700],
+    #     gravity_list=[10000],
+    #     fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
+    #     excluded_mol_list=[None],
+    #     gases_list=[['Fe', 'Al2O3', 'Mg2SiO4', 'Na2S']],  # Exclude Mg2SiO4
+    #     kzz_list=[1e7],
+    #     cloudfree=False  # Set to True for cloud-free models only
+    # )
+
+    ### No Na2S
+    # param_grid = create_parameter_grid(
+    #     Teff_list=[1200],
+    #     C_to_O_list=[0.55],
+    #     wave_range_list=[[1.5, 5]],
+    #     R_list=[700],
+    #     gravity_list=[10000],
+    #     fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
+    #     excluded_mol_list=[None],
+    #     gases_list=[['Fe', 'Al2O3', 'MgSiO3', 'Mg2SiO4']],  # Exclude Mg2SiO4
+    #     kzz_list=[1e7],
+    #     cloudfree=False  # Set to True for cloud-free models only
+    # )
     
-    ### Different condensates inclusion
+    ### Only iron / aluminium
     param_grid = create_parameter_grid(
         Teff_list=[1200],
         C_to_O_list=[0.55],
@@ -402,6 +419,7 @@ if __name__ == "__main__":
         gravity_list=[10000],
         fsed_list=[1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18],
         excluded_mol_list=[None],
+        gases_list=[['Fe', 'Al2O3']],  # Exclude all but iron
         kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only
     )
