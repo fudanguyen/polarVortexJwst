@@ -22,19 +22,19 @@
     "cloud_thickness"
   ],
   "spectra_assignments": {
-    "0": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.00_cloudy.csv",
-    "1": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.02_cloudy.csv",
-    "2": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.04_cloudy.csv",
-    "3": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.06_cloudy.csv",
-    "4": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.08_cloudy.csv",
-    "5": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.10_cloudy.csv",
-    "6": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.12_cloudy.csv",
-    "7": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.14_cloudy.csv",
-    "8": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.16_cloudy.csv",
-    "9": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251104_115102/spec_1200_10000_1.0E+07_1.18_cloudy.csv"
+    "0": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.00_cloudy.csv",
+    "1": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.02_cloudy.csv",
+    "2": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.04_cloudy.csv",
+    "3": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.06_cloudy.csv",
+    "4": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.08_cloudy.csv",
+    "5": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.10_cloudy.csv",
+    "6": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.12_cloudy.csv",
+    "7": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.14_cloudy.csv",
+    "8": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.16_cloudy.csv",
+    "9": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_20251108_162457_all5condensates/spec_1200_10000_1.0E+07_1.18_cloudy.csv"
   },
   "metadata": {
-    "created": "2025-11-06T16:28:13.227562",
+    "created": "2025-11-08T20:50:45.848320",
     "total_combinations": 10,
     "assigned_spectra": 10
   }

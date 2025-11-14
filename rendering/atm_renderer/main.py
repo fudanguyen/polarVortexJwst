@@ -918,8 +918,6 @@ if __name__ == "__main__":
     print("VTK Version:", vtk.vtkVersion.GetVTKVersion())
     print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 
-    runName = 'test_discrete'  # Simulation identifier
-
     # Set up band_config: latitudinal features
     Ppol, Pband = 60, 5  # Periods in hours
     Fpolar, Fband, Fambient = 1, 1, 1 # amp
@@ -929,14 +927,26 @@ if __name__ == "__main__":
     bandConfig has to be in this format:
     [latUp, latDown, brightness, type, phase, period, variability] 
     '''
+
+    # runName = 'test_discrete'  # Simulation identifier
+    # bandConfig = [
+    #     [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
+    #     [37, 30., Fband, 'B', 0, Pband/2, Fband_var],
+    #     [15, 5, Fband, 'B', 30, Pband, Fband_var], 
+    #     [-5, -15, Fband, 'B', 0, Pband, Fband_var],
+    #     [-30, -37, Fband, 'B', 30, Pband/2, Fband_var],
+    #     [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
+    # ]
+
+    runName = 'test_discrete2'  # Simulation identifier
     bandConfig = [
         [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
-        [37, 30., Fband, 'B', 0, Pband/2, Fband_var],
-        [15, 5, Fband, 'B', 30, Pband, Fband_var], 
-        [-5, -15, Fband, 'B', 0, Pband, Fband_var],
-        [-30, -37, Fband, 'B', 30, Pband/2, Fband_var],
+        [37, 30., Fband, 'B', 0+120, Pband/2, Fband_var],
+        [15, 5, Fband, 'B', 30+120, Pband, Fband_var], 
+        [-5, -15, Fband, 'B', 0+120, Pband, Fband_var],
+        [-30, -37, Fband, 'B', 30+120, Pband/2, Fband_var],
         [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
-    ]
+    ]    
 
     # Set up atmosphere config: the rest of the simulation
     atmo_config = AtmosphericConfig(

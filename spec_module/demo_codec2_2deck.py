@@ -1,4 +1,4 @@
-# demo_codec.py
+# demo_codec2_2deck.py
 import numpy as np
 import json
 import os
@@ -873,65 +873,78 @@ def digitize_frames(results, bins):
 
 if __name__ == "__main__":
     # Load your data
-    path = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/test_discrete.h5'
-    results = readPhotometry(path)
+    allres = {}
+    photoDir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
+    photoPath = [photoDir+'test_discrete.h5',
+            photoDir+'test_discrete2.h5']
     
+    for i in range(len(photoPath)):
+        data = readPhotometry(photoPath[i])
+        
+        # Generate bins and digitize
+        cl1, cl2 = data['40']['metadata']['colorlim']
+        Fpolar_var = data['40']['metadata']['Fpolar_var']
+        Fband_var = data['40']['metadata']['Fband_var']
+        var = max(Fpolar_var, Fband_var)
+        v1, v2 = 1 - var, 1 + var
+        slope = 255/(cl2 - cl1)
+        intercept = 0 - slope * cl1
+        a, b = slope*v1 + intercept, slope*v2 + intercept
+        n = 10
+        bins = generate_bins(a, b, nbin=n, type='linear')
+        
+        digitize_frames(data, bins)
+        allres[i] = data
     
-    # Generate bins and digitize
-    cl1, cl2 = results['40']['metadata']['colorlim']
-    Fpolar_var = results['40']['metadata']['Fpolar_var']
-    Fband_var = results['40']['metadata']['Fband_var']
-    var = max(Fpolar_var, Fband_var)
-    v1, v2 = 1 - var, 1 + var
-    slope = 255/(cl2 - cl1)
-    intercept = 0 - slope * cl1
-    a, b = slope*v1 + intercept, slope*v2 + intercept
-    n = 10
-    bins = generate_bins(a, b, nbin=n, type='linear')
-    
-    digitize_frames(results, bins)
-    
+    results = allres[0]
+    results2 = allres[1]
+
     print("=" * 60)
     print("CODEC SYSTEM DEMONSTRATION")
     print("=" * 60)
     
     # ===== STEP 1: Initialize Codec System =====
     print("\n### STEP 1: Initialize Codec System ###")
+    spectraDir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
+
+    ### all condensates (fe, al203, mg2sio4, mgsio3, na2s)
     codec = CodecSystem()
-    
-    ### Search for .csv files in the specified directory
-    dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
-    specpath = dir+'bd_grid_20251108_162457_all5condensates'
-
+    specpath = spectraDir+'bd_grid_20251108_162457_all5condensates'
     csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
-    print(f"Found {len(csv_files)} .csv files in {specpath}")
-
-    # Add cloud thickness codec
-    codec.add_codec_type('cloud_thickness', max_value=n, 
+    codec.add_codec_type('cloud_thickness', max_value=n, # Add cloud thickness codec
                         description='Cloud optical depth levels')
-    # Generate all combinations
-    codec.generate_combinations()
+    codec.generate_combinations() # Generate all combinations
     
+    ### no na2s clouds
+    codec2 = CodecSystem()
+    specpath2 = spectraDir+'bd_grid_20251108_163839_noNa2S'
+    csv_files2 = sorted(glob.glob(f"{specpath2}/*.csv"))
+    codec2.add_codec_type('cloud_thickness', max_value=n, # Add cloud thickness codec
+                        description='Cloud optical depth levels')
+    codec2.generate_combinations() # Generate all combinations
+
     # ===== STEP 2: Assign Spectra (Manual) =====
     print("\n### STEP 2: Manual Spectra Assignment ###")
     
     # Use the provided csv_files for assignment
     for i in range(n):
         codec.assign_spectra(i, csv_files[i], validate=True)
-    print(f"Assigned {len(codec.spectra_assignments)} spectra files")
-    
+        codec2.assign_spectra(i, csv_files2[i], validate=True)
+    print(f"Assigned {len(codec.spectra_assignments)} spectra files for codec 1")
+    print(f"Assigned {len(codec2.spectra_assignments)} spectra files for codec 2")
+
     # ===== Load all spectra into memory =====
     print("\n### Loading Spectra ###")
-    codec.load_all_spectra(verbose=True)
+    codec.load_all_spectra(verbose=False)
+    codec2.load_all_spectra(verbose=False)
 
-    # Display first few combinations
-    print("\nCodec combinations:")
-    for i in range(n):
-        codec.print_combination(i)
+    # # Display combinations
+    # print("\nCodec combinations:")
+    # for i in range(n):
+    #     codec.print_combination(i)
 
-    # ===== Export/Import Configuration =====
+    # ===== Test Export/Import Configuration =====
     codec.export_mapping('codec_config.json')
-    # Test import
     codec_loaded = CodecSystem()
     codec_loaded.import_mapping('codec_config.json', validate_files=False)
     
@@ -945,45 +958,81 @@ if __name__ == "__main__":
                 'cloud_thickness': results[inclin]['digitized']
             },
             frames=range(0, len(results[inclin]['digitized'])),
-            verbose=True)
+            verbose=False)
 
-        # ===== NEW: Calculate Composite Spectra for All Frames =====
+        results_ts2 = None
+        results_ts2 = codec2.process_time_series(
+            time_variant_codecs={
+                'cloud_thickness': results2[inclin]['digitized']
+            },
+            frames=range(0, len(results2[inclin]['digitized'])),
+            verbose=False)
+
+        # ===== Calculate Composite Spectra for All Frames =====
         print("\n### Calculating Composite Spectra Time Series ###")
         composite_spectra_ts = codec.calculate_composite_spectra_timeseries(
             results_ts,
             save_dir=None,
-            verbose=True)
+            verbose=False)
+
+        composite_spectra_ts2 = codec2.calculate_composite_spectra_timeseries(
+            results_ts2,
+            save_dir=None,
+            verbose=False)
+
+        # ===== Combine the two timeseries =====
+        combined_spectra = []
+
+        for i, (ts1_data, ts2_data) in enumerate(zip(composite_spectra_ts, composite_spectra_ts2)):
+            frame1, wave1, flux1 = ts1_data
+            frame2, wave2, flux2 = ts2_data
+            
+            # Check frame indices match
+            if frame1 != frame2:
+                raise ValueError(f"Frame index mismatch at position {i}: {frame1} vs {frame2}")
+            
+            # Check wavelength grids match
+            if not np.allclose(wave1, wave2):
+                raise ValueError(f"Wavelength grid mismatch at frame {frame1}")
+            
+            # Check flux array shapes match
+            if flux1.shape != flux2.shape:
+                raise ValueError(f"Flux shape mismatch at frame {frame1}: {flux1.shape} vs {flux2.shape}")
+            
+            # Add fluxes together
+            flux_sum = flux1 + flux2
+            combined_spectra.append((frame1, wave1, flux_sum))
+
+        # ===== Plot the combined spectra =====
+
+        # Vectorized light curve plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+        frames = np.arange(len(composite_spectra_ts))
+        f1 = np.array([np.sum(flux) for _, _, flux in composite_spectra_ts])
+        f2 = np.array([np.sum(flux) for _, _, flux in composite_spectra_ts2])
+        fsum = np.array([np.sum(flux) for _, _, flux in combined_spectra])
+        ax.plot(frames, f1/f1.max(), c='g', label='Spectra 1')
+        ax.plot(frames, f2/f2.max(), c='b', label='Spectra 2')
+        ax.plot(frames, fsum/fsum.max()+0.05, c='r', label='Combined')
+        ax.set_xlabel('Frame'); ax.set_ylabel('Total Flux'); ax.legend(); ax.grid(True)
+        plt.show()
 
         # ===== Visualization: Compare Individual vs Composite =====
         print("\n### Visualizing Spectra ###")
 
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-        # ===== Plot 1: All individual spectra =====
-        ax = axes[0, 0]
-        for codec_id in range(n):  # Plot all codec
-            wave_i, flux_i = codec.load_spectrum(codec_id)
-            ax.plot(wave_i, flux_i, alpha=1, lw=0.5, label=f'Codec {codec_id}')
-        ax.set_xlabel('Wavelength (μm)')
-        ax.set_ylabel('Flux (erg/cm²/s/Hz)')
-        ax.set_title('Individual Spectra')
-        ax.legend()
-        ax.set_yscale('log')
-        ax.grid(True, alpha=0.3)
-
-        # ===== Plot 2: Light curves for specific wavelength bin =====
-        ax = axes[0,1]
-
-        # Define wavelength bins
-        wavebin = [(2.0, 2.1, 'red'),
-                (2.5, 2.6, 'blue'),]
+        # ===== Plot 1: Light curve bin 1 =====
+        ax = axes[0,0]
+        wavebin = [(1.8, 1.9, 'red'), 
+                   (1.9, 2.0, 'green')]
 
         # Extract light curves for each bin
         for wmin, wmax, color in wavebin:
             flux_timeseries = []
             time_indices = results[inclin]['time_array']
             
-            for frame_i, wave_i, flux_i in composite_spectra_ts:
+            for frame_i, wave_i, flux_i in combined_spectra:
                 # Find wavelength indices in the bin
                 mask = (wave_i >= wmin) & (wave_i <= wmax)
                 
@@ -1011,35 +1060,63 @@ if __name__ == "__main__":
         ax.grid(True, alpha=0.3)
         ax.set_yscale('linear')
 
-        # ===== Plot 3: Fractional contributions =====
+        # ===== Plot 2: Light curves bin 2 =====
+        ax = axes[0,1]
+        wavebin = [(2.6, 2.7, 'blue'), 
+                    (2.7, 2.8, 'orange')]
 
+        # Extract light curves for each bin
+        for wmin, wmax, color in wavebin:
+            flux_timeseries = []
+            time_indices = results[inclin]['time_array']
+            
+            for frame_i, wave_i, flux_i in combined_spectra:
+                # Find wavelength indices in the bin
+                mask = (wave_i >= wmin) & (wave_i <= wmax)
+                
+                if np.sum(mask) > 0:
+                    # Calculate median flux in this bin
+                    median_flux = np.median(flux_i[mask])
+                    flux_timeseries.append(median_flux)
+            
+            # Plot light curve
+            ax.plot(time_indices, flux_timeseries, 
+                    marker='o', linestyle='-', color=color, 
+                    linewidth=2, markersize=4,
+                    label=f'{wmin}-{wmax} μm')
+
+            # Highlight specific timepoint
+            for xid in [30, 60, 90]:
+                ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
+                        marker='*', markersize=12, color=color)
+
+        ax.set_xlabel('Frame Index')
+        ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
+
+        ax.set_title(f'Light Curves for Selected Wavelength Bins; i={inclin}')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('linear')
+
+        # ===== Plot 3: All spectra =====
+        ax = axes [1,0]
         # Process a Single Frame for Reference
-        print(f"\n### Processing Single Frame; i={inclin} ###")
-        frame_idx = 0
-        composite = codec.create_composite_image(
-            cloud_thickness=results[inclin]['digitized'][frame_idx]
-        )
-        fractions = codec.calculate_spectral_fractions(composite, detailed=True)
-        # wave, flux = codec.calculate_composite_spectrum(fractions)
-
-        ax = axes[1, 0]
-        codec_ids = list(fractions['fractions'].keys())
-        frac_values = list(fractions['fractions'].values())
-        ax.bar(codec_ids, frac_values)
-        ax.set_xlabel('Codec ID')
-        ax.set_ylabel('Fractional Area')
-        ax.set_title(f'Fractional Contributions (Frame {frame_idx}); i={inclin}')
-        ax.grid(True, alpha=0.3, axis='y')
+        for codec_id in range(n):  # Plot all codec
+            wave_i, flux_i = codec.load_spectrum(codec_id)
+            ax.plot(wave_i, flux_i, alpha=1, lw=0.5, label=f'Codec {codec_id}')
+        ax.set_xlabel('Wavelength (μm)')
+        ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+        ax.set_title('Individual Spectra')
+        ax.legend()
+        ax.set_yscale('log')
+        ax.grid(True, alpha=0.3)
 
         # ===== Plot 4: Composite spectra evolution over time =====
         ax = axes[1, 1]
-        # for i in range(0, len(composite_spectra_ts), 10):  # Every 10th frame
-        #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
-        #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
         
-        frameA, waveA, fluxA = composite_spectra_ts[30]
-        frameB, waveB, fluxB = composite_spectra_ts[60]
-        frameC, waveC, fluxC = composite_spectra_ts[90]
+        frameA, waveA, fluxA = combined_spectra[30]
+        frameB, waveB, fluxB = combined_spectra[60]
+        frameC, waveC, fluxC = combined_spectra[90]
 
         ax.plot(waveA, fluxA/fluxB, lw=1, label=f'Frame A / Frame B')
         ax.plot(waveA, fluxA/fluxC, lw=1, label=f'Frame A / Frame C')
@@ -1052,52 +1129,8 @@ if __name__ == "__main__":
         ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
-        handle = f'spectra_analysis_i={inclin}.png'
+        handle = f'2deck_spectra_analysis_i={inclin}.png'
         plt.savefig(handle, dpi=150, bbox_inches='tight')
         print("\nSaved visualization to ", handle)
         plt.show()
         plt.close()
-
-        ######## Plot all composite images in a grid (5 columns)
-        n_frames = 60
-        n_cols = 5
-        n_rows = int(np.ceil(n_frames / n_cols))
-
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 4*n_rows))
-
-        # Flatten axes for easier indexing
-        if n_rows == 1:
-            axes = axes.reshape(1, -1)
-        axes_flat = axes.flatten()
-
-        # Plot each frame
-        for j in range(n_frames):
-            i = 2*j  # Select every 2nd frame for visibility
-            ax = axes_flat[j]
-            composite = results_ts[i]['composite']
-            frame_idx = results_ts[i]['frame']
-            
-            im = ax.imshow(composite, cmap='viridis', interpolation='nearest')
-            ax.set_title(f'Frame {frame_idx}', fontsize=10)
-            ax.axis('off')
-            
-            # Add colorbar
-            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-        # Hide unused subplots
-        for i in range(n_frames, len(axes_flat)):
-            axes_flat[i].axis('off')
-
-        plt.tight_layout()
-        plt.savefig(f'all_composite_frames_i={inclin}.png', dpi=150, bbox_inches='tight')
-        print(f"Saved all {n_frames} frames to 'all_composite_frames.png'")
-        plt.show()
-        plt.close()
-
-        # ===== Summary Statistics =====
-        print("\n### Spectra Information ###")
-        info = codec.get_spectra_info()
-        print(f"Loaded {info['n_spectra']} spectra")
-        print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
-        print(f"Number of wavelength points: {info['n_wavelength_points']}")
-# %%
