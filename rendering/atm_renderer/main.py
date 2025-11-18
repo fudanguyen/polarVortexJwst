@@ -414,6 +414,7 @@ class AtmosphereVisualizer:
         self.config = config
         self.imsize = imsize
         self.plotter = None
+        self._limb_mask_cache = None  # Cache for limb darkening mask
 
     def configure_plotter(self, zoom_factor=1.01):
         """Configure PyVista plotter with proper camera setup"""
@@ -441,6 +442,52 @@ class AtmosphereVisualizer:
         self.plotter.camera.parallel_scale = zoom_factor  # Uncommented this line
         
         return self.plotter
+
+    def _apply_limb_darkening(self, grayscale, u_coefficient=0.1):
+        """
+        Apply limb darkening to grayscale image with caching.
+        
+        Args:
+            grayscale: 2D grayscale image array
+            u_coefficient: Limb-darkening coefficient (0.5-0.9 typical range)
+        
+        Returns:
+            grayscale_darkened: Image with limb darkening applied
+        """
+        # Compute limb darkening mask (cached based on shape and u_coefficient)
+        cache_key = (grayscale.shape, u_coefficient)
+        if self._limb_mask_cache is None or self._limb_mask_cache[0] != cache_key:
+            # Detect actual sphere boundary from the rendered image
+            xlen, ylen = grayscale.shape
+            xcen, ycen = xlen // 2, ylen // 2
+            
+            # Find radius by detecting first non-black pixel from center outward
+            boundary_pixel = np.where(grayscale[:, ycen] > 0.)[0]
+            if len(boundary_pixel) > 0:
+                radius = xcen - boundary_pixel[0]
+            else:
+                # Fallback: use half the image size
+                radius = min(xcen, ycen)
+            
+            # Compute the limb darkening mask
+            y, x = np.ogrid[:xlen, :ylen]
+            distance_from_center = np.sqrt((x - xcen) ** 2 + (y - ycen) ** 2)
+            
+            mask = np.ones((xlen, ylen), dtype=np.float32)
+            inside_circle = distance_from_center <= radius
+            
+            # Limb darkening formula: I(μ) = I₀[1 - u(1 - μ)]
+            # where μ = cos(θ) = sqrt(1 - (r/R)²)
+            r_normalized = distance_from_center[inside_circle] / radius
+            mu = np.sqrt(np.maximum(0, 1 - r_normalized ** 2))
+            mask[inside_circle] = 1 - u_coefficient * (1 - mu)
+            
+            # Cache the mask
+            self._limb_mask_cache = (cache_key, mask)
+        
+        # Apply the cached mask
+        _, mask = self._limb_mask_cache
+        return grayscale * mask
 
     # def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
     #     """Posterize grayscale image using KMeans clustering and remap to speckey values"""
@@ -533,8 +580,20 @@ class AtmosphereVisualizer:
         else:
             return specmask_clean
 
-    def render_frame(self, atmospheric_data, colorlim=[0.0, 1.0]):
-        """Render single timestep with full sphere visible"""
+    def render_frame(self, atmospheric_data, colorlim=[0.0, 1.0], 
+                        apply_limb_darkening=False, u_coefficient=0.3):
+        """
+        Render single timestep with full sphere visible.
+        
+        Args:
+            atmospheric_data: Atmospheric intensity data
+            colorlim: Color limits for mapping
+            apply_limb_darkening: Whether to apply limb darkening effect
+            u_coefficient: Limb darkening coefficient (0.5-0.9 typical)
+        
+        Returns:
+            grayscale: Rendered frame with optional limb darkening applied
+        """
         # Don't reconfigure plotter if it already exists
         if self.plotter is None:
             self.configure_plotter()
@@ -559,6 +618,13 @@ class AtmosphereVisualizer:
             raise RuntimeError("Screenshot failed - empty or None result")
             
         grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
+        # Apply limb darkening if requested
+        if apply_limb_darkening:
+            grayscale = self._apply_limb_darkening(grayscale, u_coefficient)
+        else:
+            # run only once to cache the mask
+            if self._limb_mask_cache is None:
+                _ = self._apply_limb_darkening(grayscale, u_coefficient)
 
         return grayscale
 
@@ -613,7 +679,9 @@ def process_single_inclination(inclin, config, mesh):
         'time_array': config.time_config.time_array,
         'metadata': config._to_dict(),
         'specmask': specmask,
+        'limb_mask_cache': visualizer._limb_mask_cache
     }
+
 # ==============================================================================
 # Run the simulation and visualization
 #===============================================================================
@@ -659,53 +727,153 @@ class SimulationRunner:
         output_path = os.path.join(self.base_path, f'{prefix}.h5')
         with h5py.File(output_path, 'w') as f:
             for inclin, data in results.items():
+                gray_data = data['gray_array']
+                if not isinstance(gray_data, np.ndarray):
+                    gray_data = np.array(gray_data, dtype=np.float32)
                 f.create_dataset(f'{inclin}/gray_array', 
-                                 data=np.array(data['gray_array']), 
-                                 chunks=True, compression=compression)
+                                data=gray_data, chunks=True, compression=compression)
                 f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
                 f.create_dataset(f'{inclin}/time_array', data=data['time_array'])
                 # Save metadata as JSON string
                 metadata_json = json.dumps(data['metadata'])
                 f.create_dataset(f'{inclin}/metadata', data=metadata_json)
+                # Save limb_mask_cache if exists
+                if data.get('limb_mask_cache') is not None:
+                    _, limb_cache_mask = data['limb_mask_cache']
+                    f.create_dataset(f'{inclin}/limb_mask_cache_mask', data=limb_cache_mask)
                 # f.create_dataset(f'{inclin}/centroids_specmask', data=str(data['centroids_specmask']))
 
     # ===================================
     # Convert gray_array to video
     # ===================================
     @staticmethod
-    def save_video_from_array(gray_array, filepath, fps=30):
-        # Ensure frames are uint8
-        frames_uint8 = (np.clip(gray_array, 0, 1) * 255).astype(np.uint8) \
-            if gray_array.dtype != np.uint8 else gray_array
-
-        # Convert RGB to BGR for OpenCV
-        frames_bgr = [cv2.cvtColor(frame, cv2.COLOR_RGB2BGR) for frame in frames_uint8]
-
-        height, width, _ = frames_bgr[0].shape
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    def save_video_from_array(gray_array, filepath, fps=30, cmap='inferno', quality='high', clim=None):
+        """
+        Save grayscale array as video with colormap applied.
+        
+        Parameters:
+        -----------
+        gray_array : ndarray
+            Shape (n_frames, height, width) - grayscale values 0-255
+        filepath : str
+            Output video path
+        fps : int
+            Frames per second
+        cmap : str
+            Matplotlib colormap name (default: 'plasma')
+        quality : str
+            'high' or 'medium' - affects bitrate
+        clim : list or tuple, optional
+            [vmin, vmax] to clip values before normalizing (default: None uses full range)
+        """
+        import matplotlib.pyplot as plt
+        
+        # Apply clim if provided
+        if clim is not None:
+            gray_array = np.clip(gray_array, clim[0], clim[1])
+            # Normalize to 0-255 range based on clim
+            frames_uint8 = ((gray_array - clim[0]) / (clim[1] - clim[0]) * 255).astype(np.uint8)
+        else:
+            # Ensure frames are uint8
+            if gray_array.dtype != np.uint8:
+                frames_uint8 = gray_array.astype(np.uint8)
+            else:
+                frames_uint8 = gray_array
+        
+        # Get colormap from matplotlib
+        colormap = plt.get_cmap(cmap)
+        
+        # Apply colormap to each frame
+        frames_colored = []
+        for frame in frames_uint8:
+            # Normalize to 0-1 for colormap
+            frame_norm = frame / 255.0
+            # Apply colormap (returns RGBA)
+            frame_colored = colormap(frame_norm)
+            # Convert to RGB (0-255) and drop alpha channel
+            frame_rgb = (frame_colored[:, :, :3] * 255).astype(np.uint8)
+            # Convert RGB to BGR for OpenCV
+            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+            frames_colored.append(frame_bgr)
+        
+        height, width, _ = frames_colored[0].shape
+        
+        # Remove existing file if it exists
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        
+        # Use H.264 codec for better compression
+        fourcc = cv2.VideoWriter_fourcc(*'avc1')  # or try 'H264', 'X264'
         out = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
-
+        
+        if not out.isOpened():
+            # Fallback to mp4v if H.264 not available
+            print("H.264 codec not available, falling back to mp4v")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
+        
         if not out.isOpened():
             raise RuntimeError(f"Failed to open VideoWriter: {filepath}")
-
-        for frame in frames_bgr:
+        
+        for frame in frames_colored:
             out.write(frame)
+        
         out.release()
+        print(f"Video saved: {filepath}")
 
-    def create_videos_from_h5(self, prefix, fps=30):
+    def create_videos_from_h5(self, prefix, fps=30, clim=None, apply_limb_darkening=True, n_workers=4):
         """
         Create grayscale videos for each inclination stored in an HDF5 file.
+        
+        Parameters:
+        -----------
+        prefix : str
+            HDF5 file prefix
+        fps : int
+            Frames per second
+        clim : list or tuple, optional
+            [vmin, vmax] to clip values before normalizing (default: None uses full range)
+        apply_limb_darkening : bool
+            Whether to apply limb darkening mask
+        n_workers : int, optional
+            Number of parallel workers (default: None uses CPU count)
         """
+        from multiprocessing import Pool, cpu_count
+        
         h5_file_path = os.path.join(self.base_path, f'{prefix}.h5')
         base_name = os.path.splitext(os.path.basename(h5_file_path))[0]
         output_folder = os.path.join(self.base_path, f"{base_name}_video")
         os.makedirs(output_folder, exist_ok=True)
 
+        # Prepare arguments for parallel processing
+        args_list = []
         with h5py.File(h5_file_path, 'r') as f:
             for inclin in f.keys():
-                gray_array = f[f'{inclin}/gray_array'][:]
                 video_path = os.path.join(output_folder, f"{base_name}_inclin={inclin}.mp4")
-                self.save_video_from_array(gray_array, video_path, fps=fps)
+                args_list.append((h5_file_path, inclin, video_path, fps, clim, apply_limb_darkening))
+        
+        # Process videos in parallel
+        n_workers = n_workers or min(cpu_count(), len(args_list))
+        if n_workers > 1 and len(args_list) > 1:
+            print(f"Creating {len(args_list)} videos using {n_workers} workers...")
+            with Pool(processes=n_workers) as pool:
+                pool.starmap(self._create_single_video, args_list)
+        else:
+            # Single-threaded for small jobs
+            for args in args_list:
+                self._create_single_video(*args)
+    
+    @staticmethod
+    def _create_single_video(h5_file_path, inclin, video_path, fps, clim, apply_limb_darkening):
+        """Helper function to create a single video (for parallel processing)."""
+        with h5py.File(h5_file_path, 'r') as f:
+            gray_array = f[f'{inclin}/gray_array'][:]
+            
+            if apply_limb_darkening:
+                limb_mask = f[f'{inclin}/limb_mask_cache_mask']
+                gray_array = limb_mask * gray_array
+        
+        SimulationRunner.save_video_from_array(gray_array, video_path, fps=fps, clim=clim)
 
 # ==============================================================================
 # Light curve generation and plotting
@@ -928,25 +1096,25 @@ if __name__ == "__main__":
     [latUp, latDown, brightness, type, phase, period, variability] 
     '''
 
-    # runName = 'test_discrete'  # Simulation identifier
-    # bandConfig = [
-    #     [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
-    #     [37, 30., Fband, 'B', 0, Pband/2, Fband_var],
-    #     [15, 5, Fband, 'B', 30, Pband, Fband_var], 
-    #     [-5, -15, Fband, 'B', 0, Pband, Fband_var],
-    #     [-30, -37, Fband, 'B', 30, Pband/2, Fband_var],
-    #     [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
-    # ]
-
-    runName = 'test_discrete2'  # Simulation identifier
+    runName = 'test_limbdark'  # Simulation identifier
     bandConfig = [
         [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
-        [37, 30., Fband, 'B', 0+120, Pband/2, Fband_var],
-        [15, 5, Fband, 'B', 30+120, Pband, Fband_var], 
-        [-5, -15, Fband, 'B', 0+120, Pband, Fband_var],
-        [-30, -37, Fband, 'B', 30+120, Pband/2, Fband_var],
+        [37, 30., Fband, 'B', 0, Pband/2, Fband_var],
+        [15, 5, Fband, 'B', 30, Pband, Fband_var], 
+        [-5, -15, Fband, 'B', 0, Pband, Fband_var],
+        [-30, -37, Fband, 'B', 30, Pband/2, Fband_var],
         [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
-    ]    
+    ]
+
+    # runName = 'test_discrete2'  # Simulation identifier
+    # bandConfig = [
+    #     [90, 65, Fpolar, 'P', 0, Ppol, Fpolar_var],
+    #     [37, 30., Fband, 'B', 0+120, Pband/2, Fband_var],
+    #     [15, 5, Fband, 'B', 30+120, Pband, Fband_var], 
+    #     [-5, -15, Fband, 'B', 0+120, Pband, Fband_var],
+    #     [-30, -37, Fband, 'B', 30+120, Pband/2, Fband_var],
+    #     [-65, -90, Fpolar, 'P', 0, Ppol, Fpolar_var]
+    # ]    
 
     # Set up atmosphere config: the rest of the simulation
     atmo_config = AtmosphericConfig(
@@ -986,7 +1154,7 @@ if __name__ == "__main__":
     runner.save_simulation(runName)
 
     # Save a video of simulation results
-    runner.create_videos_from_h5(runName, fps=6)
+    runner.create_videos_from_h5(runName, fps=6, clim=[0,150])
 
 #%% Binned image generator and plotter
     def generate_bins(a, b, nbin, type='linear', power=2):
@@ -1008,10 +1176,11 @@ if __name__ == "__main__":
     def plot_frames(h5_path, inclination, t=0, handle='gray', plot_discrete=True, bins=None):
         with h5py.File(h5_path, 'r') as f:
             data = f[f'{inclination}/gray_array'][t]  # Frame at time t
+            limb_mask = f[f'{inclination}/limb_mask_cache_mask']
             spec = f[f'{inclination}/specmask']
             fig, axes = plt.subplots(1,3, figsize=(15,5))
             # Original data
-            axes[0].imshow(data, vmin=0, vmax=150, cmap='inferno')
+            axes[0].imshow(limb_mask*data, vmin=0, vmax=150, cmap='inferno')
             # Binned image
             binned = np.digitize(np.array(data), bins, right=True)
             axes[1].imshow(binned, cmap='viridis')
@@ -1022,7 +1191,7 @@ if __name__ == "__main__":
             plt.close()
         return binned
 
-    if False:
+    if True:
         filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
         for inc in incli_array:
             for t in range(10):
