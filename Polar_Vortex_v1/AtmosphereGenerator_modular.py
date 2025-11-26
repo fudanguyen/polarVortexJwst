@@ -97,6 +97,22 @@ def create_folder(folder_path):
 ############## Create Planetary-scale waves ##############################
 ### unit: hour, rotational period: 5 hour
 def plWave(x, value, t, w=xsize, f=0, amplitude=0.4, base=0.5, RP=5): # planetary scale waves
+    """
+    Creates planetary scale sine wave for bands that aligns with rotation period.
+
+    Parameters:
+        x (array): spatial position array
+        value (float): base value/array to which sine modulation is added
+        t (float): current time step
+        w (int): spatial wavelength of sine wave
+        f (float): phase offset of the sine wave
+        amplitude (float): amplitude of sine wave
+        base (int): base value around which sine wave oscillates
+        RP (float): rotational period of object
+
+    Returns:
+        value + sine (array): combined pattern from adding time-varying sine wave and base value
+    """
     # create the sine-wave modulation, such that the sine wave looks the same after
     # every rotational period RP
     # w is the spatial period equals to the pixel size
@@ -106,6 +122,19 @@ def plWave(x, value, t, w=xsize, f=0, amplitude=0.4, base=0.5, RP=5): # planetar
 
 ############## Create uniform time-variant polar-layer ##############################
 def polar_change(value=0, amplitude=0.25, t=0, f=0, RP=60):
+    """
+    Creates uniform time-variant polar layer by establishing flux value for the layer.
+
+    Parameters:
+        value (float): base value for flux
+        amplitude (float): amplitude of the time-varying sine modulation of flux
+        t (float): current time step
+        f (float): phase offset for sine wave
+        RP (float): modulation period of the flux
+
+    Returns:
+        flux (float): flux value at given time step
+    """
     # value: polar cap base flux value
     flux = value + amplitude*np.sin(2*np.pi/RP*t + f*np.pi/180)
     return flux
@@ -114,6 +143,16 @@ def polar_change(value=0, amplitude=0.25, t=0, f=0, RP=60):
 ##### Limb-darkening mask-array for a square image
 ## STATUS: OPTIMIZED
 def limb_darkening(arr, u_coefficient=0.75):
+    """
+    Creates limb darkening mask by identifying darkening boundaries in pixels.
+
+    Parameters:
+        arr (array): pixel array of first rendered frame
+        u_coefficient (float): limb-darkening coefficient
+
+    Returns:
+        mask (array): new pixel array where inner circle has accordingly adjusted (limb-darkened) values
+    """
     ## u_coefficient limb-darkening coefficient, assume a low limb darkening 
     ## (decreases with increasing wavelength, with decreasing temperature)
     xlen, ylen = arr.shape[0], arr.shape[1]
@@ -132,6 +171,17 @@ def limb_darkening(arr, u_coefficient=0.75):
     
 ##### Create equi-distant list for vortices center coordinate ######
 def equidistant_values(X0, X1, n):
+    """
+    Creates equi-distant list of center coordinates between two endpoints for the vortices.
+
+    Parameters:
+        X0 (float): starting interval coordinate
+        X1 (float): ending interval coordinate
+        n (int): number of coordinates to be returned
+
+    Returns:
+        array of n equally spaced center coordinates between X0 and X1
+    """
     N = n+1
     if N < 1:
         raise ValueError("N must be greater than or equal to 1")
@@ -143,14 +193,45 @@ def equidistant_values(X0, X1, n):
 
 ####### convert latitude to pixel location ############
 def lat(coord,n=ysize):
+    """
+    Converts latitude to pixel location.
+    
+    Parameters:
+        coord (float): latitude on object
+        n (int): height of pixel array
+    
+    Returns:
+        pixel location along the y-axis
+    """
     return abs(coord-90)/180*n # pixel location
 
 ####### convert longitude to pixel location ############
 def long(coord,n=xsize):
+    """
+    Converts longitude to pixel location.
+    
+    Parameters:
+        coord (float): longitude on object
+        n (int): width of pixel array
+    
+    Returns:
+        pixel location along the x-axis
+    """
     return abs(coord)/360*n # pixel location
 
 ####### area of region bounded by two latitudes #######
 def area_bounded_latitudes(lat1, lat2, radius=1):
+    """
+    Determines area of region on sphere bounded by two latitudes.
+    
+    Parameters:
+        lat1 (float): first latitude value
+        lat2 (float): second latitude value
+        radius (float): radius of sphere
+    
+    Returns:
+        area on sphere between latitudes 1 and 2
+    """
     ## lat1 > lat2, lat in degree
     return abs(2*np.pi * radius * (np.sin(lat2*np.pi/180)-np.sin(lat1*np.pi/180)))
 
@@ -208,59 +289,103 @@ def circle_vortice(recmap, coord, t=0, number=5, variable_vortice=False, rotatio
     return recmap
 
 def circle_vortice_vectorized(recmap, coord, t=0, number=5, variable_vortice=False, rotation_period=30):
+    """
+    Generates vectorized circular vortices - circular patches in polar regions.
+
+    Parameters:
+        recmap (array): array representing planetary map
+        coord (array): latitudinal boundaries for polar bands
+        t (float): time step
+        number (float): number of vortex center coordinates to be generated
+        variable_vortice (bool): whether the vortex is variable
+        rotation_period (float): rotation period of object
+    
+    Returns:
+        recmap (array): modified planetary map with elliptical vortices with new flux values added
+    """
     radiusfrac = 0.3
-    a, b = 0.7, 0.20
+    #a, b = 0.7, 0.20
 
     phaseValue = np.zeros(9) if not variable_vortice else np.array([0, -2, 5, -4, 8, 2, 4, -6, -8])
     
     for array in coord:
         lat1, lat2 = array[0], array[1]
         center_coord_long = equidistant_values(0, 360, n=number)
+        centerlong = long(center_coord_long) + xsize * (-t % rotation_period / rotation_period)
+        centerlong %= xsize
+
         center_coord_lat = (lat1 + lat2) / 2
         centerlat = int(lat(center_coord_lat))
-        
+
+        area_cap = 2 * np.pi * abs(np.sin(np.radians(lat1)) - np.sin(np.radians(lat2)))
+        r_vortice = np.sqrt(radiusfrac * area_cap) * (xsize / np.pi)
+
+        rng = np.random.default_rng(11)
+        max_drift_radius = r_vortice / 2
+
+        theta = rng.uniform(0, 2 * np.pi, size=(5, 120))
+        r = rng.uniform(0, max_drift_radius, size=(5, 120))
+        drift_x_matrix = r * np.cos(theta)
+        drift_y_matrix = r * np.sin(theta)
+
+        cos_lat = np.cos(np.radians(center_coord_lat))
+        radius_y = r_vortice
+        radius_x = r_vortice / cos_lat
+         
         amplitude = recmap[int(xsize / 2), ysize - 1]
         variableflux = 0.2 * np.sin(2 * np.pi / rotation_period * t - phaseValue) if variable_vortice else np.full(number, 0.2)
         
-        r_vortice = np.sqrt(radiusfrac * area_bounded_latitudes(lat1, lat2, radius=1)) * (xsize / np.pi)
-        ar, br = a * r_vortice, b * r_vortice
+        # r_vortice = np.sqrt(radiusfrac * area_bounded_latitudes(lat1, lat2, radius=1)) * (xsize / np.pi)
+        # ar, br = a * r_vortice, b * r_vortice
         
-        # Vectorized coordinate adjustments
-        revised_center_coord_long_px = long(center_coord_long) + (xsize) * (-t % rotation_period / rotation_period)
-        revised_center_coord_long_px = np.where(
-            revised_center_coord_long_px > xsize - 1,
-            revised_center_coord_long_px - (xsize - 1),
-            revised_center_coord_long_px
-        )
-        revised_center_coord_long_px = np.where(
-            revised_center_coord_long_px < 0,
-            revised_center_coord_long_px + (xsize - 1),
-            revised_center_coord_long_px
-        )
+        # # Vectorized coordinate adjustments
+        # revised_center_coord_long_px = long(center_coord_long) + (xsize) * (-t % rotation_period / rotation_period)
+        # revised_center_coord_long_px = np.where(
+        #     revised_center_coord_long_px > xsize - 1,
+        #     revised_center_coord_long_px - (xsize - 1),
+        #     revised_center_coord_long_px
+        # )
+        # revised_center_coord_long_px = np.where(
+        #     revised_center_coord_long_px < 0,
+        #     revised_center_coord_long_px + (xsize - 1),
+        #     revised_center_coord_long_px
+        # )
         
-        dxCen = np.diff(long(center_coord_long))[0]
-        if revised_center_coord_long_px.min() < long(center_coord_long).min():
-            revised_center_coord_long_px = np.append(
-                revised_center_coord_long_px,
-                revised_center_coord_long_px.max() + dxCen
-            )
-        elif revised_center_coord_long_px.max() > long(center_coord_long).max():
-            revised_center_coord_long_px = np.append(
-                revised_center_coord_long_px, 
-                revised_center_coord_long_px.min() - dxCen
-            )
+        # dxCen = np.diff(long(center_coord_long))[0]
+        # if revised_center_coord_long_px.min() < long(center_coord_long).min():
+        #     revised_center_coord_long_px = np.append(
+        #         revised_center_coord_long_px,
+        #         revised_center_coord_long_px.max() + dxCen
+        #     )
+        # elif revised_center_coord_long_px.max() > long(center_coord_long).max():
+        #     revised_center_coord_long_px = np.append(
+        #         revised_center_coord_long_px, 
+        #         revised_center_coord_long_px.min() - dxCen
+        #     )
 
-        # make sure flux array matches
-        if revised_center_coord_long_px.size > variableflux.size:
-            variableflux = np.append(variableflux, variableflux[0])
+        # # make sure flux array matches
+        # if revised_center_coord_long_px.size > variableflux.size:
+        #     variableflux = np.append(variableflux, variableflux[0])
 
         # Vectorized mask for vortices
         xx, yy = np.meshgrid(np.arange(xsize), np.arange(ysize), indexing='ij')
-        for i, xi in enumerate(revised_center_coord_long_px):
-            xi_int = int(xi)
-            mask = ((xx - xi_int) ** 2 / ar ** 2 + (yy - centerlat) ** 2 / br ** 2 <= 1) & \
-                (lat(lat2) > yy) & (yy > lat(lat1))
-            recmap[mask] = amplitude + variableflux[i]
+        for i, xi in enumerate(centerlong):
+            dx = drift_x_matrix[i, t % 120]
+            dy = drift_y_matrix[i, t % 120]
+
+            lon_px_int = int((xi + float(dx) % xsize))
+            lat_px_int = int(np.clip(float(centerlong + dy), 0, ysize - 1))
+
+            mask = (
+                (((xx - lon_px_int) / radius_x) ** 2 + ((yy - lat_px_int) / radius_y) ** 2) <= 1) & (yy <= lat(lat1)) & (yy >= lat(lat2))
+
+            recmap[mask] = amplitude + variableflux[i % len(variableflux)]
+            # xi_int = int(xi)
+            # mask = (
+            #     ((xx - xi_int) / radius_x) ** 2 + 
+            #     ((yy - centerlat) / radius_y) ** 2 <= 1) & \
+            #     (yy <= lat(lat1)) & (yy >= lat(lat2))
+            # recmap[mask] = amplitude + variableflux[i % len(variableflux)]
     
     return recmap
 
@@ -409,12 +534,17 @@ for counter, inclin in enumerate(inclination):
     else:   
         print('  #### Run:[i=%i], %i/%i ####'%(inclin, counter+1, len(inclination)))
         ### model name  
-        modelname = 'production2'
-        config = [[90, 65, Fpolar, 'P', 0, Ppol],
-                  [45, 38., Fband, 'B', 10, Pband/2],
-                  [25, 15, Fband, 'B', 150, Pband], 
-                  [-10, -20, Fband, 'B', -26, Pband],
-                  [-33, -40, Fband, 'B', 135, Pband/2],
+        modelname = 'production3'
+        # config = [[90, 65, Fpolar, 'P', 20, Ppol],
+        #           [45, 38., Fband, 'B', 10, Pband/2],
+        #           [25, 15, Fband, 'B', 150, Pband], 
+        #           [-10, -20, Fband, 'B', -26, Pband],
+        #           [-33, -40, Fband, 'B', 135, Pband/2],
+        #           [-65, -90, Fpolar, 'P', 0, Ppol]]
+
+        config = [[90, 65, Fpolar, 'P', 20, Ppol],
+                  [50, 20, Fband, 'B', 60, Pband],
+                  [-20, -50, Fband, 'B', 135, Pband],
                   [-65, -90, Fpolar, 'P', 0, Ppol]]
         
         ### Build metadata list
@@ -431,6 +561,19 @@ for counter, inclin in enumerate(inclination):
         # =====================================================================
         ### Edit the property of bands here!
         def atmos_mesh(x, config, t=0, spec=False):
+            """
+            Constructs full planetary map with the respective features in each band.
+
+            Parameters:
+                x (array): pixel array representing blank planetary map
+                config (array): array of configuration parameters for each band and its respective features
+                t (float): current time step
+                spec (bool): 
+            
+            Returns:
+                if spec = TRUE - (im, sm) (tuple of arrays): planetary and spectral maps with new features in respective bands
+                if spec = FALSE - im (array): planetary map with new features in respective
+            """
             im = np.full(x.shape, Fambient, dtype=np.float32)  # Vectorized initialization
             sm = np.full(x.shape, speckey['A'], dtype=np.float32)  # Vectorized initialization
             
