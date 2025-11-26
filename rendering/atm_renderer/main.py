@@ -22,6 +22,7 @@ print(vtk.vtkVersion.GetVTKVersion())
 import h5py
 import pickle
 import os
+import json
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
@@ -136,7 +137,7 @@ class TimeConfig:
     # can add "incomplete" time array to account for gaps in observation
     # ex. [[0, 10], [50, 60], [100, 120]]
     """
-    def __init__(self, t0=0, t1=60, frames=60):
+    def __init__(self, t0=0, t1=60, frames=60, option='full'):
         """
         Args:
             t0: Start time (hours)
@@ -146,13 +147,30 @@ class TimeConfig:
         self.t0 = t0
         self.t1 = t1
         self.frames = frames
+        self.option = option
         
         # Derived properties
-        self.time_array = np.linspace(t0, t1, frames)
-        self.dt = (t1 - t0) / frames  # Time step
+        if option == 'full':
+            self.time_array = np.linspace(t0, t1, frames)
+            self.dt = (t1 - t0) / frames  # Time step
         
     def __repr__(self):
-        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames})"
+        return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames}, format={self.option})"
+
+    def _to_dict(self):
+        """Convert to JSON-serializable dictionary"""
+        return {
+            't0': self.t0,
+            't1': self.t1,
+            'frames': self.frames,
+            'dt': self.dt,
+            'option': self.option
+        }
+    
+    @classmethod
+    def from_dict(cls, d):
+        """Reconstruct from dictionary"""
+        return cls(t0=d['t0'], t1=d['t1'], frames=d['frames'])
 # =============================================================================
 class AtmosphericConfig:
     """
@@ -182,16 +200,17 @@ class AtmosphericConfig:
                  modu_config: str,
                  modelname: str,
                  time_config: TimeConfig,
-                 Fband: float = 0.6,
-                 Fband_var: float = 0.05,
-                 Fambient: float  = 0.5,
-                 Fambient_var: float = 0.00,
-                 Fpolar: float  = 0.7,
-                 Fpolar_var: float = 0.05,
+                 Fband: float = 1,
+                 Fambient: float  = 1,
+                 Fpolar: float  = 1,
                  Pband: float  = 5.0,
                  Ppol: float  = 60.0,
                  Prot: float = 5.0,
-                 speckey: dict = None):
+                 Fambient_var: float = 0.0,
+                 Fpolar_var: float = 0.05,
+                 Fband_var: float = 0.05,
+                 speckey: dict = None,
+                 colorlim: list = [0.5, 1.5]):
         """
         Args:
             band_config: Atmospheric band parameters
@@ -209,16 +228,18 @@ class AtmosphericConfig:
         self.time_config = time_config
         # Base contrast values
         self.Fambient = Fambient
-        self.Fambient_var = Fambient_var
         self.Fband = Fband
-        self.Fband_var = Fband_var
         self.Fpolar = Fpolar
+        # Variability values
+        self.Fband_var = Fband_var
         self.Fpolar_var = Fpolar_var
+        self.Fambient_var = Fambient_var
         # Periods in hours
         self.Pband = Pband
         self.Ppol = Ppol
         self.Prot = Prot
         self.speckey = speckey or {'BG':0, 'A': 150, 'B': 200, 'P': 250}
+        self.colorlim = colorlim
         
         self._validate_config()
 
@@ -233,6 +254,49 @@ class AtmosphericConfig:
         for band in self.band_config:
             if len(band) != len(required_band_keys):
                 raise ValueError("Invalid band configuration")
+
+    def _to_dict(self):
+        """Convert to JSON-serializable dictionary"""
+        return {
+            'band_config': self.band_config,
+            'modu_config': self.modu_config,
+            'modelname': self.modelname,
+            'time_config': self.time_config._to_dict(),  # Nested serialization
+            'Fambient': self.Fambient,
+            'Fband': self.Fband,
+            'Fpolar': self.Fpolar,
+            'Pband': self.Pband,
+            'Ppol': self.Ppol,
+            'Fambient_var': self.Fambient_var,
+            'Fband_var': self.Fband_var,
+            'Fpolar_var': self.Fpolar_var,
+            'speckey': self.speckey,
+            'colorlim': self.colorlim
+        }
+    
+    @classmethod
+    def from_dict(cls, d):
+        """Reconstruct from dictionary"""
+        time_config = TimeConfig.from_dict(d['time_config'])
+        return cls(
+            band_config=d['band_config'],
+            modu_config=d['modu_config'],
+            modelname=d['modelname'],
+            time_config=time_config,
+            Fambient=d['Fambient'],
+            Fband=d['Fband'],
+            Fpolar=d['Fpolar'],
+            Pband=d['Pband'],
+            Ppol=d['Ppol'],
+            Fambient_var=d['Fambient_var'],
+            Fband_var=d['Fband_var'],
+            Fpolar_var=d['Fpolar_var'],
+            speckey=d['speckey']
+        )
+    
+    def __repr__(self):
+        return f"AtmosphericConfig(model={self.modelname}, time={self.time_config})"
+
 # ==============================================================================
 # Core atmospheric simulation logic
 # =============================================================================
@@ -373,6 +437,7 @@ class AtmosphericModel:
             lat2, lat1, amp, typ, phase, period, planet_period, variab = group
             lat_px1 = self._lat_px(lat1)
             lat_px2 = self._lat_px(lat2)
+            wavenumber = self.config.Pband / period
             
             # Vectorized latitude mask
             mask = (self.yy >= lat_px2) & (self.yy <= lat_px1)
@@ -380,7 +445,7 @@ class AtmosphericModel:
             
             if typ.upper() == 'B':  # Band
                 # im = self._apply_discrete_planetary_wave(im, mask, t, amp, phase, period, variab)
-                im = self._apply_planetary_wave(im, mask, t, amp, phase, period, planet_period, variab)
+                im = self._apply_planetary_wave(im, mask, t, amp, phase, period, planet_period, variab, wavenumber)
 
             elif typ.upper() == 'P':  # Polar
                 im = self._apply_polar_effect(im, mask, t, amp, phase, period, planet_period, variab)
@@ -406,7 +471,7 @@ class AtmosphericModel:
         """
         return np.abs(lat_deg - 90) / 180 * self.ysize
     
-    def _apply_planetary_wave(self, im, mask, t, amp, phase, period, planet_period, variab):
+    def _apply_planetary_wave(self, im, mask, t, amp, phase, period, planet_period, variab, wavenumber):
         """
         Vectorized planetary wave implementation.
 
@@ -423,7 +488,7 @@ class AtmosphericModel:
             im (array): updated flux map with planetary wave features
         """
         # Spatial frequency (1/wavelength)
-        w = self.xsize  # Full circumference resolution
+        w = self.xsize / wavenumber  # Full circumference resolution
         sine_wave = variab * np.sin(
             2 * np.pi / w * (self.xx + (t / period) * w) + phase * np.pi / 180
         )
@@ -859,12 +924,14 @@ class AtmosphereVisualizer:
         imsize (list): length and width values in pixels defining map size
         plotter (class instance): specific plotter object
     """
-    def __init__(self, mesh, speckey, imsize=(300, 300), inclination=0):
+    def __init__(self, mesh, speckey, config, imsize=(300, 300), inclination=0):
         self.mesh = mesh
         self.inclination = inclination
         self.speckey = speckey
+        self.config = config
         self.imsize = imsize
         self.plotter = None
+        self._limb_mask_cache = None  # Cache for limb darkening mask
 
     def configure_plotter(self, zoom_factor=1.01):
         """
@@ -901,53 +968,104 @@ class AtmosphereVisualizer:
         
         return self.plotter
 
-    def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
+    def _apply_limb_darkening(self, grayscale, u_coefficient=0.1):
         """
-        Posterize grayscale image using KMeans clustering and remap to speckey values.
-
-        Parameters:
-            img (array): image in pixels values
-            tol (float): tolerance value
-            n_clusters (int): number of clusters for KMean clustering
-            min_count (int): minimum pixel count to consider validity
+        Apply limb darkening to grayscale image with caching.
+        
+        Args:
+            grayscale: 2D grayscale image array
+            u_coefficient: Limb-darkening coefficient (0.5-0.9 typical range)
         
         Returns:
-            output_img (array): centroid map
+            grayscale_darkened: Image with limb darkening applied
         """
-        target_values = np.array(list(self.speckey.values()), dtype=np.uint8)
+        # Compute limb darkening mask (cached based on shape and u_coefficient)
+        cache_key = (grayscale.shape, u_coefficient)
+        if self._limb_mask_cache is None or self._limb_mask_cache[0] != cache_key:
+            # Detect actual sphere boundary from the rendered image
+            xlen, ylen = grayscale.shape
+            xcen, ycen = xlen // 2, ylen // 2
+            
+            # Find radius by detecting first non-black pixel from center outward
+            boundary_pixel = np.where(grayscale[:, ycen] > 0.)[0]
+            if len(boundary_pixel) > 0:
+                radius = xcen - boundary_pixel[0]
+            else:
+                # Fallback: use half the image size
+                radius = min(xcen, ycen)
+            
+            # Compute the limb darkening mask
+            y, x = np.ogrid[:xlen, :ylen]
+            distance_from_center = np.sqrt((x - xcen) ** 2 + (y - ycen) ** 2)
+            
+            mask = np.ones((xlen, ylen), dtype=np.float32)
+            inside_circle = distance_from_center <= radius
+            
+            # Limb darkening formula: I(μ) = I₀[1 - u(1 - μ)]
+            # where μ = cos(θ) = sqrt(1 - (r/R)²)
+            r_normalized = distance_from_center[inside_circle] / radius
+            mu = np.sqrt(np.maximum(0, 1 - r_normalized ** 2))
+            mask[inside_circle] = 1 - u_coefficient * (1 - mu)
+            
+            # Cache the mask
+            self._limb_mask_cache = (cache_key, mask)
+        
+        # Apply the cached mask
+        _, mask = self._limb_mask_cache
+        return grayscale * mask
 
-        # Flatten to 1D array of intensities
-        pixels = img.ravel()
+    # def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
+    #     """Posterize grayscale image using KMeans clustering and remap to speckey values"""
+    #     target_values = np.array(list(self.speckey.values()), dtype=np.uint8)
 
-        # Filter out rare/noisy intensities
-        unique, counts = np.unique(pixels, return_counts=True)
-        valid = unique[counts >= min_count]
-        filtered_pixels = pixels[np.isin(pixels, valid)]
+    #     # Flatten to 1D array of intensities
+    #     pixels = img.ravel()
 
-        if filtered_pixels.size == 0:
-            return np.zeros_like(img, dtype=np.uint8), {}
+    #     # Filter out rare/noisy intensities
+    #     unique, counts = np.unique(pixels, return_counts=True)
+    #     valid = unique[counts >= min_count]
+    #     filtered_pixels = pixels[np.isin(pixels, valid)]
 
-        # Run KMeans on filtered values
-        X = filtered_pixels.reshape(-1, 1)
-        kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
-        kmeans.fit(X)
+    #     if filtered_pixels.size == 0:
+    #         return np.zeros_like(img, dtype=np.uint8), {}
 
-        # Round centroids to nearest integers and sort them
-        centroids = np.sort(np.rint(kmeans.cluster_centers_.flatten()).astype(int))
+    #     # Run KMeans on filtered values
+    #     X = filtered_pixels.reshape(-1, 1)
+    #     kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
+    #     kmeans.fit(X)
 
-        # Map sorted centroids to speckey values (smallest->0, next->80, etc.)
-        centroid_map = dict(zip(centroids, target_values))
+    #     # Round centroids to nearest integers and sort them
+    #     centroids = np.sort(np.rint(kmeans.cluster_centers_.flatten()).astype(int))
 
-        # Create output image initialized to 0
-        output_img = np.zeros_like(img, dtype=np.uint8)
+    #     # Map sorted centroids to speckey values (smallest->0, next->80, etc.)
+    #     centroid_map = dict(zip(centroids, target_values))
 
-        # Apply mapping: within tolerance of centroid -> mapped speckey value
-        for c, mapped_val in centroid_map.items():
-            mask = np.abs(img.astype(int) - int(c)) <= tol
-            output_img[mask] = mapped_val
+    #     # Create output image initialized to 0
+    #     output_img = np.zeros_like(img, dtype=np.uint8)
 
-        return output_img #, centroid_map
+    #     # Apply mapping: within tolerance of centroid -> mapped speckey value
+    #     for c, mapped_val in centroid_map.items():
+    #         mask = np.abs(img.astype(int) - int(c)) <= tol
+    #         output_img[mask] = mapped_val
 
+    #     return output_img #, centroid_map
+
+    def im_posterize(self, img):
+        """Posterize grayscale image by mapping to nearest speckey value"""
+        target_values = np.array(sorted(self.speckey.values()), dtype=np.uint8)  # [0, 150, 200, 250]
+        
+        # For each pixel, find the nearest target value
+        img_flat = img.ravel().astype(float)
+        
+        # Vectorized nearest-neighbor assignment
+        distances = np.abs(img_flat[:, np.newaxis] - target_values)
+        nearest_indices = np.argmin(distances, axis=1)
+        output_img = target_values[nearest_indices]
+        
+        return np.array(output_img.reshape(img.shape).astype(np.uint8))
+
+    def render_specmask(self, specmap, posterize=True):
+        """Render spectral mask with full sphere visible"""
     def render_specmask(self, specmap, posterize=False):
         """
         Render spectral mask with full sphere visible.
@@ -994,12 +1112,24 @@ class AtmosphereVisualizer:
         self.plotter = None
 
         if posterize: 
-            return self.im_posterize(specmask_clean, tol=20)
+            return self.im_posterize(specmask_clean)
         else:
             return specmask_clean
 
-    def render_frame(self, atmospheric_data, colorlim=[0.0, 1.0]):
-        """Render single timestep with full sphere visible"""
+    def render_frame(self, atmospheric_data, colorlim=[0.0, 1.0], 
+                        apply_limb_darkening=False, u_coefficient=0.3):
+        """
+        Render single timestep with full sphere visible.
+        
+        Args:
+            atmospheric_data: Atmospheric intensity data
+            colorlim: Color limits for mapping
+            apply_limb_darkening: Whether to apply limb darkening effect
+            u_coefficient: Limb darkening coefficient (0.5-0.9 typical)
+        
+        Returns:
+            grayscale: Rendered frame with optional limb darkening applied
+        """
         # Don't reconfigure plotter if it already exists
         if self.plotter is None:
             self.configure_plotter()
@@ -1013,7 +1143,7 @@ class AtmosphereVisualizer:
             
         grid.point_data['scalars'] = atmospheric_data.ravel(order='F')
 
-        self.plotter.add_mesh(grid, cmap='inferno', show_scalar_bar=False,
+        self.plotter.add_mesh(grid, cmap='gray', show_scalar_bar=False,
                               clim=colorlim, interpolate_before_map=True)
         
         if not hasattr(self.plotter, 'camera_set') or not self.plotter.camera_set:
@@ -1024,10 +1154,20 @@ class AtmosphereVisualizer:
             raise RuntimeError("Screenshot failed - empty or None result")
             
         grayscale = np.dot(screenshot[..., :3], [0.2989, 0.5870, 0.1140])
+        # Apply limb darkening if requested
+        if apply_limb_darkening:
+            grayscale = self._apply_limb_darkening(grayscale, u_coefficient)
+        else:
+            # run only once to cache the mask
+            if self._limb_mask_cache is None:
+                _ = self._apply_limb_darkening(grayscale, u_coefficient)
 
         return grayscale
+
+    def digitizer(self, img, bins):
+        return None
     
-    def photometry(self, config, model, inclin, colorlim=[0.0, 1.0]):
+    def photometry(self, config, model, inclin):
         """
         Generate photometry images over time.
         
@@ -1040,6 +1180,7 @@ class AtmosphereVisualizer:
         Returns:
             photometry_array (array): array containing photometry data
         """
+        colorlim = config.colorlim
         photometry_array = np.empty((config.time_config.frames, 
                                     self.imsize[0], self.imsize[1]), dtype=np.float32)
         time_array = config.time_config.time_array
@@ -1257,18 +1398,20 @@ def process_single_inclination(inclin, config, mesh, model, colorlim):
     """Top-level function for multiprocessing"""
     visualizer = AtmosphereVisualizer(mesh=mesh, 
                                       speckey=config.speckey,
+                                      config=config,
                                       imsize=[300, 300], 
                                       inclination=inclin)
     
-    gray_array = visualizer.photometry(config, model, inclin, colorlim)
+    gray_array = visualizer.photometry(config, model, inclin)
     specmap = model.generate_specmap()
-    specmask = visualizer.render_specmask(specmap, posterize=False)
+    specmask = visualizer.render_specmask(specmap, posterize=True)
     
     return {
         'gray_array': gray_array,
         'time_array': config.time_config.time_array,
-        'metadata': config.__dict__,
+        'metadata': config._to_dict(),
         'specmask': specmask,
+        'limb_mask_cache': visualizer._limb_mask_cache
     }
 
 def process_time_chunk(inclin, time_chunk, config, mesh, model, colorlim):
@@ -1413,21 +1556,30 @@ class SimulationRunner:
         output_path = os.path.join(self.base_path, f'{prefix}.h5')
         with h5py.File(output_path, 'w') as f:
             for inclin, data in results.items():
+                gray_data = data['gray_array']
+                if not isinstance(gray_data, np.ndarray):
+                    gray_data = np.array(gray_data, dtype=np.float32)
                 f.create_dataset(f'{inclin}/gray_array', 
-                                 data=np.array(data['gray_array']), 
-                                 chunks=True, compression=compression)
+                                data=gray_data, chunks=True, compression=compression)
                 f.create_dataset(f'{inclin}/specmask', data=data['specmask'])
-                f.create_dataset(f'{inclin}/metadata', data=str(data['metadata']))
                 f.create_dataset(f'{inclin}/time_array', data=data['time_array'])
+                # Save metadata as JSON string
+                metadata_json = json.dumps(data['metadata'])
+                f.create_dataset(f'{inclin}/metadata', data=metadata_json)
+                # Save limb_mask_cache if exists
+                if data.get('limb_mask_cache') is not None:
+                    _, limb_cache_mask = data['limb_mask_cache']
+                    f.create_dataset(f'{inclin}/limb_mask_cache_mask', data=limb_cache_mask)
                 # f.create_dataset(f'{inclin}/centroids_specmask', data=str(data['centroids_specmask']))
 
     # ===================================
     # Convert gray_array to video
     # ===================================
     @staticmethod
-    def save_video_from_array(gray_array, filepath, fps=30, cmap='inferno', quality='high'):
+    def save_video_from_array(gray_array, filepath, fps=30, cmap='inferno', quality='high', clim=None):
         """
         Save grayscale array as video with colormap applied.
+        
         Parameters:
         -----------
         gray_array : ndarray
@@ -1440,14 +1592,26 @@ class SimulationRunner:
             Matplotlib colormap name (default: 'plasma')
         quality : str
             'high' or 'medium' - affects bitrate
+        clim : list or tuple, optional
+            [vmin, vmax] to clip values before normalizing (default: None uses full range)
         """
-        # Ensure frames are uint8
-        if gray_array.dtype != np.uint8:
-            frames_uint8 = gray_array.astype(np.uint8)
+        import matplotlib.pyplot as plt
+        
+        # Apply clim if provided
+        if clim is not None:
+            gray_array = np.clip(gray_array, clim[0], clim[1])
+            # Normalize to 0-255 range based on clim
+            frames_uint8 = ((gray_array - clim[0]) / (clim[1] - clim[0]) * 255).astype(np.uint8)
         else:
-            frames_uint8 = gray_array
+            # Ensure frames are uint8
+            if gray_array.dtype != np.uint8:
+                frames_uint8 = gray_array.astype(np.uint8)
+            else:
+                frames_uint8 = gray_array
+        
         # Get colormap from matplotlib
         colormap = plt.get_cmap(cmap)
+        
         # Apply colormap to each frame
         frames_colored = []
         for frame in frames_uint8:
@@ -1460,139 +1624,287 @@ class SimulationRunner:
             # Convert RGB to BGR for OpenCV
             frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
             frames_colored.append(frame_bgr)
+        
         height, width, _ = frames_colored[0].shape
+        
+        # Remove existing file if it exists
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        
         # Use H.264 codec for better compression
         fourcc = cv2.VideoWriter_fourcc(*'avc1')  # or try 'H264', 'X264'
         out = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
+        
         if not out.isOpened():
             # Fallback to mp4v if H.264 not available
             print("H.264 codec not available, falling back to mp4v")
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(filepath, fourcc, fps, (width, height))
+        
         if not out.isOpened():
             raise RuntimeError(f"Failed to open VideoWriter: {filepath}")
+        
         for frame in frames_colored:
             out.write(frame)
+        
         out.release()
         print(f"Video saved: {filepath}")
 
-    def create_videos_from_h5(self, prefix, fps=30):
+    def create_videos_from_h5(self, prefix, fps=30, clim=None, apply_limb_darkening=True, n_workers=4):
         """
         Create grayscale videos for each inclination stored in an HDF5 file.
+        
+        Parameters:
+        -----------
+        prefix : str
+            HDF5 file prefix
+        fps : int
+            Frames per second
+        clim : list or tuple, optional
+            [vmin, vmax] to clip values before normalizing (default: None uses full range)
+        apply_limb_darkening : bool
+            Whether to apply limb darkening mask
+        n_workers : int, optional
+            Number of parallel workers (default: None uses CPU count)
         """
+        from multiprocessing import Pool, cpu_count
+        
         h5_file_path = os.path.join(self.base_path, f'{prefix}.h5')
         base_name = os.path.splitext(os.path.basename(h5_file_path))[0]
         output_folder = os.path.join(self.base_path, f"{base_name}_video")
         os.makedirs(output_folder, exist_ok=True)
 
+        # Prepare arguments for parallel processing
+        args_list = []
         with h5py.File(h5_file_path, 'r') as f:
             for inclin in f.keys():
-                gray_array = f[f'{inclin}/gray_array'][:]
                 video_path = os.path.join(output_folder, f"{base_name}_inclin={inclin}.mp4")
-                self.save_video_from_array(gray_array, video_path, fps=fps)
+                args_list.append((h5_file_path, inclin, video_path, fps, clim, apply_limb_darkening))
+        
+        # Process videos in parallel
+        n_workers = n_workers or min(cpu_count(), len(args_list))
+        if n_workers > 1 and len(args_list) > 1:
+            print(f"Creating {len(args_list)} videos using {n_workers} workers...")
+            with Pool(processes=n_workers) as pool:
+                pool.starmap(self._create_single_video, args_list)
+        else:
+            # Single-threaded for small jobs
+            for args in args_list:
+                self._create_single_video(*args)
+    
+    @staticmethod
+    def _create_single_video(h5_file_path, inclin, video_path, fps, clim, apply_limb_darkening):
+        """Helper function to create a single video (for parallel processing)."""
+        with h5py.File(h5_file_path, 'r') as f:
+            gray_array = f[f'{inclin}/gray_array'][:]
+            
+            if apply_limb_darkening:
+                limb_mask = f[f'{inclin}/limb_mask_cache_mask']
+                gray_array = limb_mask * gray_array
+        
+        SimulationRunner.save_video_from_array(gray_array, video_path, fps=fps, clim=clim)
 
 # ==============================================================================
 # Light curve generation and plotting
 # ==============================================================================
-# ==============================================================================
-# Light curve generation and plotting
-# ==============================================================================
-# ==============================================================================
-# Light curve generation and plotting
-# ==============================================================================
-def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, 
-                              figsize=(10, 6), alpha=0.8):
-        """
-        Plot lightcurves for all inclinations on the same plot.
+class LightcurveGenerator:
+    """
+    Compute photometric lightcurves from gray_array and specmask,
+    with vectorized flux calculation for efficiency.
+    """
 
-        Parameters
-        ----------
-        flux_type : str, optional
-            Which flux to plot. Options: 'fluxtotal', 'fluxA', 'fluxB', 'fluxP', etc.
-            Default is 'fluxtotal' to show total flux from all regions.
-        normalize : bool, optional
-            If True, normalize each lightcurve by its own maximum value.
-        figsize : tuple, optional
-            Figure size (width, height) in inches.
-        alpha : float, optional
-            Line transparency (0-1).
-        """
-        
-        # Check if flux data exists
-        flux_data_available = {inc: self.results[inc].get('flux', None) 
-                              for inc in self.results.keys()}
-        
-        missing_flux = [inc for inc, data in flux_data_available.items() if data is None]
-        if missing_flux:
-            raise ValueError(f"No flux data found for inclinations {missing_flux}. "
-                             "Run generate_all() first.")
+    def __init__(self, results: dict):
+        self.results = results
 
-        # Determine available flux types from first inclination
-        first_flux_data = list(flux_data_available.values())[0]
-        available_flux_types = [k for k in first_flux_data.keys() 
-                               if k.startswith('flux') or k == 'fluxtotal']
-        
-        if flux_type not in available_flux_types:
-            raise ValueError(f"Flux type '{flux_type}' not found. "
-                             f"Available types: {available_flux_types}")
+    def generate_all(self):
+        """Run flux generation for all inclinations in results."""
+        for inclination, data in self.results.items():
+            self.results[inclination]['flux'] = self._generate_flux(data)
 
-        plt.figure(figsize=figsize)
+    def _generate_flux(self, data: dict) -> dict:
+        """Compute normalized fluxes and area fractions for a single inclination."""
+        # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
+        """Compute normalized fluxes and area fractions for a single inclination."""
+        print(f"Debug - type of sum function: {type(sum)}")
+        print(f"Debug - sum function: {sum}")
+        gray_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
+        time_array = np.array(data['time_array'])   # (t,)
+        specmask = data['specmask']
+        speckey = data['metadata']['speckey']
+
+        # Handle different gray_array formats
+        if len(gray_array.shape) == 4:  # (t, h, w, 3) - RGB
+            # Convert RGB to grayscale
+            gray_array = np.dot(gray_array[..., :3], [0.2989, 0.5870, 0.1140])
+        elif len(gray_array.shape) == 3:  # (t, h, w) - already grayscale
+            pass
+        else:
+            raise ValueError(f"Unexpected gray_array shape: {gray_array.shape}")
+
+        frame_height, frame_width = gray_array.shape[1:3]
+        norm_const = frame_height * frame_width
+
+        # CRITICAL FIX: Use tolerance-based matching for specmask values
+        # The grayscale conversion changes exact spectral values
+        indices = {}
+        tolerance = 50  # Allow some tolerance for matching
         
-        # Sort inclinations for consistent color progression
-        sorted_inclinations = sorted(self.results.keys())
+        for region, target_value in speckey.items():
+            if region == 'BG':
+                continue
+                
+            # Find pixels close to the target spectral value
+            mask = np.abs(specmask - target_value) <= tolerance
+            idx = np.where(mask)
+            
+            if len(idx[0]) > 0:
+                indices[region] = idx
+                print(f"Debug - Found {len(idx[0])} pixels for region '{region}' (target: {target_value})")
+            else:
+                print(f"Warning: No pixels found for region '{region}' with target value {target_value}")
+                # Try finding the closest values
+                unique_vals = np.unique(specmask)
+                closest_val = unique_vals[np.argmin(np.abs(unique_vals - target_value))]
+                print(f"  Closest value in specmask: {closest_val}")
+
+        if not indices:
+            print("ERROR: No spectral regions found! This indicates a problem with specmask generation.")
+            return {
+                'area_fractions': {},
+                'time': time_array,
+                'fluxtotal': np.zeros(len(time_array))
+            }
+
+        # Calculate area fractions
+        pixel_counts = {region: len(idx[0]) for region, idx in indices.items()}
+        total_area = __builtins__.sum(pixel_counts.values())  # Explicitly convert to list if needed
+        total_area = int(total_area)  # Force it to be an integer
         
-        # Create color gradient based on inclination
-        colors = plt.cm.plasma(np.linspace(0, 1, len(sorted_inclinations)))
-        
-        # Calculate normalization factor if requested
-        normalization_factor = 1.0
-        if normalize:
-            # Calculate average flux for each inclination (after baseline correction)
-            avg_fluxes = []
-            for inclination in sorted_inclinations:
+        if total_area == 0:
+            area_fractions = {region: 0.0 for region in indices.keys()}
+        else:
+            area_fractions = {region: count / total_area for region, count in pixel_counts.items()}
+
+        print(f"Debug - pixel_counts: {pixel_counts}")
+        print(f"Debug - pixel_counts.values(): {pixel_counts.values()}")
+        print(f"Debug - type of total_area: {type(total_area)}, value: {total_area}")
+
+        # Vectorized flux computation
+        fluxes = {}
+        for region, idx in indices.items():
+            # Extract pixel values across all time steps
+            region_pixels = gray_array[:, idx[0], idx[1]]  # Shape: (time, n_pixels)
+            flux_region = region_pixels.mean(axis=1)  # Average flux per timestep
+            fluxes[f"flux{region}"] = flux_region / norm_const * len(idx[0])  # Scale by region size
+
+        # Total flux
+        if fluxes:
+            fluxtotal = __builtins__.sum(fluxes.values())
+        else:
+            fluxtotal = np.zeros(len(time_array))
+
+        print(f"Debug - Generated fluxes for regions: {list(fluxes.keys())}")
+
+        return {
+            'area_fractions': area_fractions,
+            'time': time_array,
+            **fluxes,
+            'fluxtotal': fluxtotal
+        }
+
+    def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, 
+                                figsize=(10, 6), alpha=0.8):
+            """
+            Plot lightcurves for all inclinations on the same plot
+            Parameters
+            ----------
+            flux_type : str, optional
+                Which flux to plot. Options: 'fluxtotal', 'fluxA', 'fluxB', 'fluxP', etc.
+                Default is 'fluxtotal' to show total flux from all regions.
+            normalize : bool, optional
+                If True, normalize each lightcurve by its own maximum value.
+            figsize : tuple, optional
+                Figure size (width, height) in inches.
+            alpha : float, optional
+                Line transparency (0-1).
+            """
+            import matplotlib.pyplot as plt
+            
+            # Check if flux data exists
+            flux_data_available = {inc: self.results[inc].get('flux', None) 
+                                for inc in self.results.keys()}
+            
+            missing_flux = [inc for inc, data in flux_data_available.items() if data is None]
+            if missing_flux:
+                raise ValueError(f"No flux data found for inclinations {missing_flux}. "
+                                "Run generate_all() first.")
+
+            # Determine available flux types from first inclination
+            first_flux_data = list(flux_data_available.values())[0]
+            available_flux_types = [k for k in first_flux_data.keys() 
+                                if k.startswith('flux') or k == 'fluxtotal']
+            
+            if flux_type not in available_flux_types:
+                raise ValueError(f"Flux type '{flux_type}' not found. "
+                                f"Available types: {available_flux_types}")
+
+            plt.figure(figsize=figsize)
+            
+            # Sort inclinations for consistent color progression
+            sorted_inclinations = sorted(self.results.keys())
+            
+            # Create color gradient based on inclination
+            colors = plt.cm.gist_rainbow(np.linspace(0, 1, len(sorted_inclinations)))
+            
+            # Calculate normalization factor if requested
+            normalization_factor = 1.0
+            if normalize:
+                # Calculate average flux for each inclination (after baseline correction)
+                avg_fluxes = []
+                for inclination in sorted_inclinations:
+                    flux_data = self.results[inclination]['flux']
+                    flux = flux_data[flux_type]
+                    
+                    # Apply baseline correction first (shift to same baseline)
+                    flux_corrected = flux - np.min(flux)
+                    avg_flux = np.mean(flux_corrected)
+                    avg_fluxes.append(avg_flux)
+                
+                # Use maximum average flux as normalization factor
+                if avg_fluxes:
+                    normalization_factor = max(avg_fluxes)
+                    print(f"Debug - Average fluxes by inclination (baseline-corrected): {dict(zip(sorted_inclinations, avg_fluxes))}")
+                    print(f"Debug - Normalization factor (max avg): {normalization_factor}")
+            
+            for inclination, color in zip(sorted_inclinations, colors):
                 flux_data = self.results[inclination]['flux']
+                time = flux_data['time']
                 flux = flux_data[flux_type]
                 
-                # Apply baseline correction first (shift to same baseline)
-                flux_corrected = flux - np.min(flux)
-                avg_flux = np.mean(flux_corrected)
-                avg_fluxes.append(avg_flux)
-            
-            # Use maximum average flux as normalization factor
-            if avg_fluxes:
-                normalization_factor = max(avg_fluxes)
-                print(f"Debug - Average fluxes by inclination (baseline-corrected): {dict(zip(sorted_inclinations, avg_fluxes))}")
-                print(f"Debug - Normalization factor (max avg): {normalization_factor}")
-        
-        for inclination, color in zip(sorted_inclinations, colors):
-            flux_data = self.results[inclination]['flux']
-            time = flux_data['time']
-            flux = flux_data[flux_type]
-            
-            # Apply baseline correction (shift to same baseline)
-            flux_shifted = flux - np.min(flux)
-            
-            # Normalize by maximum average flux across all inclinations
-            if normalize and normalization_factor > 0:
-                flux_final = flux_shifted / normalization_factor
-            else:
-                flux_final = flux_shifted
-            
-            plt.plot(time, flux_final, label=f'{inclination}°', 
-                    color=color, alpha=alpha, linewidth=1.5)
+                # Apply baseline correction (shift to same baseline)
+                flux_shifted = flux - np.min(flux)
+                
+                # Normalize by maximum average flux across all inclinations
+                if normalize and normalization_factor > 0:
+                    flux_final = flux_shifted / normalization_factor
+                else:
+                    flux_final = flux_shifted
+                
+                plt.plot(time, flux_final, label=f'{inclination}°', 
+                        color=color, alpha=alpha, linewidth=1.5)
 
-        plt.xlabel("Time (hours)")
-        ylabel = "Normalized Intensity" if normalize else "Intensity"
-        plt.ylabel(ylabel)
-        plt.title(f"{flux_type.capitalize()} Lightcurves for All Inclinations")
-        
-        # Create a nice legend
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
-                  title='Inclination')
-        
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
+            plt.xlabel("Time (hours)")
+            ylabel = "Normalized Intensity" if normalize else "Intensity"
+            plt.ylabel(ylabel)
+            plt.title(f"Lightcurves for All Inclinations: [{flux_type}]")
+            
+            # Create a nice legend
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
+                    title='Inclination')
+            
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.show()
 
 # ==============================================================================
 # Set up configurations and test call
@@ -1610,6 +1922,12 @@ def main():
     Fpolar, Fband, Fambient = 1, 1, 1 # amp
     Fpolar_var, Fband_var, Fambient_var = 0.15, 0.15, 0.00 # variab
     # variability: amp + variab * sin(...)
+    ''' 
+    bandConfig has to be in this format:
+    [latUp, latDown, brightness, type, phase, period, variability] 
+    '''
+
+    runName = 'test_limbdark'  # Simulation identifier
     bandConfig = [
         # [lat2, lat1, amplitude, type, phase, period]
         [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
@@ -1630,12 +1948,16 @@ def main():
         band_config=bandConfig,  # This is your band configuration list
         modu_config='polarStatic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=120),
+        time_config=TimeConfig(t0=0, t1=60, frames=120, option='full'),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
+        Fambient_var=Fambient_var,
+        Fband_var=Fband_var,
+        Fpolar_var=Fpolar_var,
         Prot=5.0,
-        speckey= {'BG':0, 'A': 150, 'B': 200, 'P': 250}
+        speckey= {'BG':0, 'A': 150, 'B': 200, 'P': 250},
+        colorlim=[0.0, 2.0] # color_lim sets the mapping range from amplitude to [0.255]
     )
 
     # Set up the spherical mesh, initialization
@@ -1654,8 +1976,7 @@ def main():
     )
 
     # Run the simulation for a specific time range and number of frames
-    results = runner.run_simulation(colorlim=[0.5, 1.5]) 
-    # color_lim sets the color range for spatial visualization
+    results = runner.run_simulation() 
     
     # Usage example:
     model.track_and_plot_vortex_paths(np.arange(0, 120, 1), save_path='vortex_paths.png')
@@ -1664,17 +1985,33 @@ def main():
     runner.save_simulation(runName)
 
     # Save a video of simulation results
-    runner.create_videos_from_h5(runName, fps=6)
+    runner.create_videos_from_h5(runName, fps=6, clim=[0,150])
 
-    bins = [0, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]  # Define bins for digitization
+#%% Binned image generator and plotter
+    def generate_bins(a, b, nbin, type='linear', power=2):
+        """
+        Generate bins with power-law spacing.
+        """
+        if type == 'linear':
+            bins = np.linspace(a, b, nbin + 1)
+        elif type == 'power':
+            # Generate interior points only (excluding 0 and 1)
+            t = np.linspace(0, 1, nbin)  # Exclude endpoints
+            normalized = t ** power
+            bins = a + normalized * (b - a)
+        return [0] + bins.tolist() + [255]
+
+    # bins = generate_bins(106.25, 143.75, nbin=10, type='power', power=0.9)
+    bins = generate_bins(106.25, 143.75, nbin=10, type='linear')
 
     def plot_frames(h5_path, inclination, t=0, handle='gray', plot_discrete=True, bins=None):
         with h5py.File(h5_path, 'r') as f:
             data = f[f'{inclination}/gray_array'][t]  # Frame at time t
+            limb_mask = f[f'{inclination}/limb_mask_cache_mask']
             spec = f[f'{inclination}/specmask']
             fig, axes = plt.subplots(1,3, figsize=(15,5))
             # Original data
-            axes[0].imshow(data, vmin=0, vmax=150, cmap='inferno')
+            axes[0].imshow(limb_mask*data, vmin=0, vmax=150, cmap='inferno')
             # Binned image
             binned = np.digitize(np.array(data), bins, right=True)
             axes[1].imshow(binned, cmap='viridis')
@@ -1691,11 +2028,13 @@ def main():
 
             plt.show()
             plt.close()
+        return binned
 
-    filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
-    for inc in incli_array:
-        for t in range(0, 60, 20):
-            plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
+    if True:
+        filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
+        for inc in incli_array:
+            for t in range(10):
+                binned = plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
 
     ### Plot horizontal colorbar
     # Normalize bins for colormap
@@ -1708,25 +2047,27 @@ def main():
     sm = cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     # Plot colorbar
-    fig, ax = plt.subplots(figsize=(8, 1))
-    cbar = plt.colorbar(sm, cax=ax, orientation='horizontal', ticks=bins, boundaries=bins)
-    cbar.ax.set_xticklabels([str(b) for b in bins])
+    fig, ax = plt.subplots(figsize=(1,8))
+    cbar = plt.colorbar(sm, cax=ax, orientation='vertical', ticks=bins, boundaries=bins)
+    cbar.ax.set_yticklabels([f'{b:.2f}' for b in bins])
     plt.show()
 
-    # After running your simulation
+    #%% LIGHT CURVE GENERATOR
+
+    ### After running your simulation
     start = time.perf_counter()
     lc_generator = LightcurveGenerator(results)
     lc_generator.generate_all()
     end = time.perf_counter()
     print(f"Lightcurve generated in {end - start:.2f} seconds.")
 
-    # Plot total flux for all inclinations
+    ### Plot total flux for all inclinations
     lc_generator.plot_all_inclinations()
 
-    # Plot regional flux (e.g., bands) for all inclinations  
-    lc_generator.plot_all_inclinations(flux_type='fluxA', normalize=False)
-    lc_generator.plot_all_inclinations(flux_type='fluxB', normalize=False)
-    lc_generator.plot_all_inclinations(flux_type='fluxP', normalize=False)
+    ### Plot regional flux (e.g., bands) for all inclinations  
+    # lc_generator.plot_all_inclinations(flux_type='fluxA', normalize=False)
+    # lc_generator.plot_all_inclinations(flux_type='fluxB', normalize=False)
+    # lc_generator.plot_all_inclinations(flux_type='fluxP', normalize=False)
 
     # Compare flux types for specific inclination
     # lc_generator.plot_flux_comparison(inclination=40)

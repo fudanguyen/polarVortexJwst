@@ -772,7 +772,7 @@ for counter, inclin in enumerate(inclination):
         metaPath = join(folderModel_path, '[meta]dataCube[%s][%s][%i][%i][%i][%i].pkl'%(modu_config, modelname, inclin, t0, t1, frame_no))
         ### Write file
         with h5py.File(grayArrayPath, 'w') as file:
-            file.create_dataset('dataset', data=gray_array)
+            file.create_dataset('dataset', data=gray_array, compression='gzip')
         with open(metaPath, 'wb') as file2:
             pickle.dump(metadata, file2)
     # =========================================================================
