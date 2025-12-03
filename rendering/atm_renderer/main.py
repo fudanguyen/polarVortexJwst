@@ -1747,7 +1747,10 @@ if __name__ == "__main__":
     print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 
     # runName = 'test_polarMonitor_static'  # Simulation identifier
-    runName = 'test_polarMonitor_dynamic'  # Simulation identifier
+    # runName = 'test_polarMonitor_dynamic'  # Simulation identifier
+
+    # runName = 'test_polar_v0_static'
+    runName = 'test_polar_v0_dynamic'
 
     # Set up band_config: latitudinal features
     Ppol, Pband, Prot = 60, 5, 5  # Periods in hours
@@ -1783,7 +1786,7 @@ if __name__ == "__main__":
         # modu_config='polarStatic',
         modu_config='polarDynamic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=120, option='sparse'),
+        time_config=TimeConfig(t0=0, t1=60, frames=120, option='full'),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
@@ -1800,8 +1803,8 @@ if __name__ == "__main__":
     model = AtmosphericModel(mesh, atmo_config, vortexConfig)
 
     # incli_array = [40] # List of inclinations to simulate
-    # incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
-    incli_array = [0]
+    incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+    # incli_array = [0]
     # Set up the inclination configuration
     runner = SimulationRunner(
         mesh=mesh,

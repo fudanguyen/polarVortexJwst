@@ -1011,10 +1011,16 @@ def digitize_frames(results, bins):
 
 if __name__ == "__main__":
     # Load your data
-    path = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/test_discrete.h5'
+    # path = os.path.join(
+    #     '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/',
+    #     'test_discrete.h5')
+    path = os.path.join(
+        '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/',
+        'test_polar_v0_static.h5')
+
     results = readPhotometry(path)
     
-    runname = 'timeSeries_'+f'1200k_clouds=10'
+    runname = 'timeSeries_'+f'1200k_clouds=10_polarStatic'
     if False:
         runname += f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
 
@@ -1031,7 +1037,7 @@ if __name__ == "__main__":
     slope = 255/(cl2 - cl1)
     intercept = 0 - slope * cl1
     a, b = slope*v1 + intercept, slope*v2 + intercept
-    n = 10
+    n = 20
     bins = generate_bins(a, b, nbin=n, type='linear')
     digitize_frames(results, bins)
     
@@ -1041,7 +1047,8 @@ if __name__ == "__main__":
     
     ### Search for .csv files in the specified directory
     dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
-    specpath = dir+'bd_grid_20251108_162457_all5condensates'
+    # specpath = dir+'bd_grid_20251108_162457_all5condensates'
+    specpath = os.path.join(dir, 'bd_grid_20251202_simple3clouds')
 
     csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
     print(f"Found {len(csv_files)} .csv files in {specpath}")
@@ -1076,6 +1083,7 @@ if __name__ == "__main__":
     print("\n### Processing Time Series ###")
     
     for inclin in results.keys():
+    # for inclin in ['40']:
         results_ts = None
 
         # Calculate Composite Spectra for All Frames
@@ -1100,7 +1108,7 @@ if __name__ == "__main__":
         # ===== Visualization: Compare Individual vs Composite =====
         print("\n### Visualizing Spectra ###")
 
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        fig, axes = plt.subplots(3, 2, figsize=(10, 12))
 
         # ===== Plot 1: All individual spectra =====
         ax = axes[0, 0]
@@ -1110,7 +1118,7 @@ if __name__ == "__main__":
         ax.set_xlabel('Wavelength (μm)')
         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
         ax.set_title('Individual Spectra')
-        ax.legend()
+        ax.legend(fontsize=5)
         ax.set_yscale('log')
         ax.grid(True, alpha=0.3)
 
@@ -1119,7 +1127,7 @@ if __name__ == "__main__":
 
         # Define wavelength bins
         wavebin = [(2.0, 2.1, 'red'),
-                (2.5, 2.6, 'blue'),]
+                (2.4, 2.5, 'blue'),]
 
         # Extract light curves for each bin
         for wmin, wmax, color in wavebin:
@@ -1141,15 +1149,16 @@ if __name__ == "__main__":
                     label=f'{wmin}-{wmax} μm')
 
             # Highlight specific timepoint
-            for xid in [30, 60, 90]:
+            for i,xid in enumerate([30, 60, 90]):
+                color_list = ['orange', 'green', 'purple']
                 ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
-                        marker='*', markersize=12, color=color)
+                        marker='*', markersize=12, color=color_list[i],)
 
         ax.set_xlabel('Frame Index')
         ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
 
         ax.set_title(f'Light Curves for Selected Wavelength Bins; i={inclin}')
-        ax.legend()
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
         ax.set_yscale('linear')
 
@@ -1169,16 +1178,17 @@ if __name__ == "__main__":
         frac_values = list(fractions['fractions'].values())
         ax.bar(codec_ids, frac_values)
         ax.set_xlabel('Codec ID')
+        ax.set_xticks(codec_ids[::2])  # Show every other tick
         ax.set_ylabel('Fractional Area')
         ax.set_title(f'Fractional Contributions (Frame {frame_idx}); i={inclin}')
         ax.grid(True, alpha=0.3, axis='y')
 
-        ### ===== Add inset atm images to axes[1, 1] ======
-        inset_ax = ax.inset_axes([0.05, 0.7, 0.17, 0.25])  # [x, y, width, height]
-        inset_ax.imshow(results_ts[15]['composite'], cmap='viridis', aspect='auto')
-        inset_ax.set_xticks([])
-        inset_ax.set_yticks([])
-        inset_ax.set_title('Clouds-codec', fontsize=8)
+        # ### ===== Add inset atm images to axes[1, 1] ======
+        # inset_ax = ax.inset_axes([0.05, 0.3, 0.17*1.95, 0.25*2])  # [x, y, width, height]
+        # inset_ax.imshow(results_ts[15]['composite'], cmap='plasma', aspect='auto')
+        # inset_ax.set_xticks([])
+        # inset_ax.set_yticks([])
+        # inset_ax.set_title('Clouds-codec', fontsize=8)
 
         # ===== Plot 4: Composite spectra evolution over time =====
         ax = axes[1, 1]
@@ -1199,7 +1209,56 @@ if __name__ == "__main__":
         ax.set_title(f'Composite Spectra Ratio; i={inclin}')
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
+        ax.set_ylim(1.0, 1.012)
 
+        # ===== Plot 5: Periodogram of second lightcurve in hours x-axis =====
+        ax = axes[2, 0]
+
+        from PyAstronomy.pyTiming import pyPeriod
+        freqs = np.linspace(0.01, 1, 1000) 
+        flux_timeseries = np.array(flux_timeseries)
+        lombscargle = pyPeriod.Gls(# (time, flux, flux_err)
+            (time_indices, flux_timeseries, 0.001*flux_timeseries), freq=freqs)
+
+        period = 1/lombscargle.freq
+        power = lombscargle.power
+
+        fap = 0.1 # false alarm probability
+        fapLevel = lombscargle.powerLevel(fap)
+
+        # Plot the periodogram
+        ax.plot(period, power, color='purple')
+        ax.axhline(fapLevel, color='red', ls='--', 
+                    lw=0.5, label=f'FAP={fap}')
+        ax.set_xlabel('Period (hour)')
+        ax.set_ylabel('Power')
+        ax.set_title('Periodogram of Flux Timeseries')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # ===== Plot 6: 2x2 images at t=0, 10, 20, 30
+        ax = axes[2, 1]
+        timepoints = [3, 11, 32, 67]
+        n_tp = len(timepoints)
+        for i, tp in enumerate(timepoints):
+            img = results_ts[tp]['composite']
+            sub_ax = ax.inset_axes([
+            0.05 + (i % 2) * 0.47, 
+            0.55 - (i // 2) * 0.47, 
+            0.4, 0.4
+            ])
+            im = sub_ax.imshow(img, cmap='plasma', vmin=0, vmax=n,
+                                 aspect='equal')  # Set aspect to 'equal'
+            sub_ax.set_xticks([])
+            sub_ax.set_yticks([])
+            sub_ax.set_title(f'Time {tp}', fontsize=8)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        # set all spine frames to be invisible
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # ==============================
         plt.tight_layout()
         handle = f'spectra_analysis_i={inclin}.pdf'
         outpath = os.path.join(runpath, handle)

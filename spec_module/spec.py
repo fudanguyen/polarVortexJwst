@@ -410,8 +410,9 @@ if __name__ == "__main__":
     #     cloudfree=False  # Set to True for cloud-free models only
     # )
     
-    ### Only iron / aluminium
+    ### Simple 3 clouds
     fsed_list = [1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18]
+    # fsed_list = [1.01, 1.03, 1.05, 1.07, 1.09, 1.11, 1.13, 1.15, 1.17, 1.19]
 
     param_grid = create_parameter_grid(
         Teff_list=[1200],
@@ -421,7 +422,7 @@ if __name__ == "__main__":
         gravity_list=[10000],
         fsed_list=fsed_list,
         excluded_mol_list=[None],
-        gases_list=[['Fe', 'MgSiO3', 'Na2S']],  # Exclude all but iron
+        gases_list=[['Fe', 'MgSiO3', 'Na2S']],
         kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only
     )
