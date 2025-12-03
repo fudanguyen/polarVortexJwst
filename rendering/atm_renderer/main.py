@@ -11,13 +11,12 @@ Upgrade from AtmosphereGenerator.py:
 # =============================================================================
 # IMPORT LIBRARIES
 
-import sys, os
-
-# Prepend the correct site-packages folder
-sys.path.insert(0, os.path.join(os.environ['CONDA_PREFIX'], 'Lib', 'site-packages'))
+# import sys, os
+# # Prepend the correct site-packages folder
+# sys.path.insert(0, os.path.join(os.environ['CONDA_PREFIX'], 'Lib', 'site-packages'))
 
 import vtk
-print(vtk.vtkVersion.GetVTKVersion())
+# print(vtk.vtkVersion.GetVTKVersion())
 
 import h5py
 import pickle
@@ -33,11 +32,10 @@ import importlib.util
 vtk_path = importlib.util.find_spec("vtk").origin
 netcdf_path = importlib.util.find_spec("vtkmodules.vtkIONetCDF").origin
 
-print("vtk.py path:", vtk_path)
-print("vtkIONetCDF path:", netcdf_path)
-print("\nDirectory contents of vtk folder:")
-print(os.listdir(os.path.dirname(vtk_path)))
-
+# print("vtk.py path:", vtk_path)
+# print("vtkIONetCDF path:", netcdf_path)
+# print("\nDirectory contents of vtk folder:")
+# print(os.listdir(os.path.dirname(vtk_path)))
 
 # Set debug flags for VTK/OpenGL
 os.environ["VTK_DEBUG_OPENGL"] = "1"
@@ -132,7 +130,8 @@ class TimeConfig:
         dt (float): time step size
     
     Methods:
-        repr(): prints out configured time parameters
+        __repr__(): prints out configured time parameters
+        _to_dict(): converts parameters to JSON-serializable dictionary
 
     # can add "incomplete" time array to account for gaps in observation
     # ex. [[0, 10], [50, 60], [100, 120]]
@@ -158,7 +157,9 @@ class TimeConfig:
         return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames}, format={self.option})"
 
     def _to_dict(self):
-        """Convert to JSON-serializable dictionary"""
+        """
+        Converts temporal parameters to JSON-serializable dictionary.
+        """
         return {
             't0': self.t0,
             't1': self.t1,
@@ -169,7 +170,9 @@ class TimeConfig:
     
     @classmethod
     def from_dict(cls, d):
-        """Reconstruct from dictionary"""
+        """
+        Reconstructs temporal parameters from dictionary.
+        """
         return cls(t0=d['t0'], t1=d['t1'], frames=d['frames'])
 # =============================================================================
 class AtmosphericConfig:
@@ -194,6 +197,8 @@ class AtmosphericConfig:
     
     Methods:
         _validate_config(): validates configuration parameters
+        _to_dict(): converts atmospheric parameters to JSON-serializable dictionary
+        __repr__(): prints out configured atmospheric parameters
     """
     def __init__(self, 
                  band_config: list,
@@ -226,14 +231,17 @@ class AtmosphericConfig:
         self.modu_config = modu_config
         self.modelname = modelname
         self.time_config = time_config
+        
         # Base contrast values
         self.Fambient = Fambient
         self.Fband = Fband
         self.Fpolar = Fpolar
+        
         # Variability values
         self.Fband_var = Fband_var
         self.Fpolar_var = Fpolar_var
         self.Fambient_var = Fambient_var
+        
         # Periods in hours
         self.Pband = Pband
         self.Ppol = Ppol
@@ -245,7 +253,7 @@ class AtmosphericConfig:
 
     def _validate_config(self):
         """
-        Sanity checks for configuration
+        Sanity checks for configuration.
         """
         if not isinstance(self.time_config, TimeConfig):
             raise TypeError("time_config must be TimeConfig instance")
@@ -256,7 +264,9 @@ class AtmosphericConfig:
                 raise ValueError("Invalid band configuration")
 
     def _to_dict(self):
-        """Convert to JSON-serializable dictionary"""
+        """
+        Convers atmospheric parameters to JSON-serializable dictionary.
+        """
         return {
             'band_config': self.band_config,
             'modu_config': self.modu_config,
@@ -276,7 +286,9 @@ class AtmosphericConfig:
     
     @classmethod
     def from_dict(cls, d):
-        """Reconstruct from dictionary"""
+        """
+        Reconstruct atmospheric parameters from dictionary.
+        """
         time_config = TimeConfig.from_dict(d['time_config'])
         return cls(
             band_config=d['band_config'],
@@ -308,31 +320,43 @@ class AtmosphericModel:
         mesh (class instance): SphericalMesh object (provides x, y, z coordinates)
         config (class instance): AtmosphericConfig object (simulation parameters)
         speckey (dict): maps region types to spectral values
+        seed (int): random generator seed
+        n_vortice (int): number of vortices
+        radius_frac (float): fraction of polar cap covered by each vortex
+        drift (bool): boolean value indicating whether vortex drift is activated
+        step_frac (float): fraction of vortex radius defining drift step size
         xsize, ysize (int): x, y shape of mesh
         xx, yy (array): 
         lat_grid (array): vectorized latitude grid
+        drift_angles (array): randomly generated angles governing vortex drift
+        drift_positions (array): array of coordinates of vortex positions over time
     
     Methods:
         generate_specmap(): generate spectral map based on speckey config
         generate_atmosphere(): generate atmospheric map at time = t
+
         _lat_px(lat_deg): convert latitude (vectorized) to pixel coordinates
         _apply_planetary_wave(im, mask, t, amp, phase, period, variab): apply planetary wave feature to given region (bands)
         _apply_polar_effect(im, mask, t, amp, phase, period, variab): apply polar cap modulation effects
-        _circle_vortice_vectorized(im, lat1, lat2, t, group, modu_config): generates equally spaced vortices in polar cap with configured features
-        _long_px(long_deg): convert longitude (vectorized) to pixel coordinates
+        _apply_vortices(im, t, modu_config): adds vortices to polar regions
         _equidistant_longitudes(t, rotation_period): find equidistant longitudes of vortex centers
+        _latlon_to_stereographic_vectorized(lat, lon, lat0, lon0): conversion of lat/lon to stereographic projection coordinates
+        _add_drift(r_vortice, max_drift_radius, center_lat): calculates array of all vortex positions over time
+        _circle_vortice_vectorized(im, lat1, lat2, t, group, modu_config): generates equally spaced vortices in polar cap with configured features
+
+        track_and_plot_vortex_paths(t_range, save_path, plot_style): track vortex positions over time and plot on polar cap map
     """
     def __init__(self, mesh, band_config, vortex_config):
         """
         Args:
             mesh: SphericalMesh object (provides x, y, z coordinates)
-            config: AtmosphericConfig object (simulation parameters)
-            speckey: Dict mapping region types to spectral values
+            band_config: AtmosphericConfig object (simulation parameters)
+            vortex_config: array of vortex configuration parameters
         """
         self.mesh = mesh
         self.config = band_config
         self.speckey = band_config.speckey
-        self.n_vortice, self.radius_frac, self.drift = vortex_config
+        self.seed, self.n_vortice, self.radius_frac, self.drift, self.step_frac = vortex_config
         
         # Derived properties from mesh
         self.xsize, self.ysize = self.mesh.shape
@@ -342,60 +366,12 @@ class AtmosphericModel:
         self.lat_grid = np.abs(self.yy - 90) / 180 * self.ysize  # From lat() function
         
         # Create random motion grids
-        rng = np.random.default_rng(11)
+        rng = np.random.default_rng(self.seed)
         self.drift_angles = rng.uniform(0, 2 * np.pi, size=(self.n_vortice, 120))
         self.drift_positions = None
         
         print(f"Drift angles shape: {self.drift_angles.shape}")
         print(f"Sample angles: {self.drift_angles[0, :5]}")  # First vortex, first 5 steps
-
-    def add_drift(self, step_size, max_drift_radius, center_lat):
-        drift_positions = np.zeros((self.n_vortice, 120, 2))
-
-        ang_step_size = (step_size / self.ysize) * 180
-        max_ang_drift = (max_drift_radius / self.ysize) * 180
-
-        center_lat_rad = np.radians(center_lat)
-
-        step_lon = ang_step_size * np.cos(self.drift_angles) / np.cos(center_lat_rad)
-        step_lat = ang_step_size * np.sin(self.drift_angles)
-
-        cumulative_lon = np.zeros((self.n_vortice, 120))
-        cumulative_lat = np.zeros((self.n_vortice, 120))
-
-        for t_idx in range(120):
-            if t_idx == 0:
-                proposed_lon = step_lon[:, 0]
-                proposed_lat = step_lat[:, 0]
-            else:
-                proposed_lon = cumulative_lon[:, t_idx - 1] + step_lon[:, t_idx]
-                proposed_lat = cumulative_lat[:, t_idx - 1] + step_lat[:, t_idx]
-            
-            ang_dist = np.sqrt(proposed_lat**2 + (proposed_lon * np.cos(center_lat_rad))**2)
-
-            within_bounds = ang_dist <= max_ang_drift
-            
-            if t_idx == 0:
-                cumulative_lon[:, t_idx] = np.where(within_bounds, proposed_lon, 0.0)
-                cumulative_lat[:, t_idx] = np.where(within_bounds, proposed_lat, 0.0)
-            else:
-                cumulative_lon[:, t_idx] = np.where(
-                    within_bounds, 
-                    proposed_lon, 
-                    cumulative_lon[:, t_idx - 1]
-                )
-                cumulative_lat[:, t_idx] = np.where(
-                    within_bounds, 
-                    proposed_lat, 
-                    cumulative_lat[:, t_idx - 1]
-                )
-        
-        # Package results: shape (n_vortice, 120, 2)
-        drift_positions = np.zeros((self.n_vortice, 120, 2))
-        drift_positions[:, :, 0] = cumulative_lon  # longitude degrees
-        drift_positions[:, :, 1] = cumulative_lat  # latitude degrees
-        
-        return drift_positions
 
     def generate_specmap(self):
         """
@@ -482,7 +458,9 @@ class AtmosphericModel:
             amp (float): planetary wave amplitude
             phase (float): phase shift of planetary wave
             period (float): planetary wave period
+            planet_period (float): rotational period
             variab (float): variability
+            wavenumber (float): wavenumber of planetary wave
         
         Returns:
             im (array): updated flux map with planetary wave features
@@ -519,6 +497,7 @@ class AtmosphericModel:
             amp (float): planetary wave amplitude
             phase (float): phase shift of planetary wave
             period (float): planetary wave period
+            planet_period (float): rotational period
             variab (float): variability
         
         Returns:
@@ -529,7 +508,9 @@ class AtmosphericModel:
         return im
     
     def _apply_vortices(self, im, t, modu_config):
-        """Vectorized vortices implementation"""
+        """
+        Vectorized vortices implementation
+        """
         # Get polar regions from config
         polar_groups = [g for g in self.config.band_config if g[3].upper() == 'P']
         
@@ -539,16 +520,38 @@ class AtmosphericModel:
             
         return im
     
+    def _equidistant_longitudes_degrees(self, t, rotation_period):
+        """
+        Calculate equidistant longitudes for vortex centers in degrees.
+
+        Parameters:
+            t (float): time
+            rotation_period (float): rotation period of object
+        
+        Returns:
+            long_positions_deg (array): array of longitude positions in degrees [0, 360)
+        """
+        # Generate evenly spaced base positions in degrees
+        base_pos_deg = np.linspace(0, 360, self.n_vortice + 1)[:-1]
+        
+        # Calculate drift in degrees
+        drift_deg = ((-t % rotation_period) / rotation_period) * 360
+        
+        # Apply drift and wrap to [0, 360)
+        long_positions_deg = (base_pos_deg + drift_deg) % 360
+        
+        return long_positions_deg
+    
     def _latlon_to_stereographic_vectorized(self, lat, lon, lat0, lon0):
         """
         Vectorized conversion of lat/lon to stereographic projection coordinates.
         Handles broadcasting for multiple vortex centers.
         
         Parameters:
-            lat (array): latitude in degrees (can be multi-dimensional)
-            lon (array): longitude in degrees (can be multi-dimensional)
-            lat0 (array): center latitude for projection (can be multi-dimensional)
-            lon0 (array): center longitude for projection (can be multi-dimensional)
+            lat (array): latitude in degrees
+            lon (array): longitude in degrees
+            lat0 (array): center latitude for projection
+            lon0 (array): center longitude for projection
         
         Returns:
             X, Y (arrays): stereographic coordinates (same shape as input)
@@ -573,6 +576,65 @@ class AtmosphericModel:
                 np.sin(lat0_rad) * np.cos(lat_rad) * np.cos(dlon))
         
         return X, Y
+    
+    def _add_drift(self, r_vortice, max_drift_radius, center_lat):
+        """
+        Calculates 3D array of all vortex positions over time.
+
+        Args:
+            r_vortice: vortex radius
+            center_lat: latitude of center of vortices
+        
+        Returns:
+            drift_positions: 3D array of all vortex position coordinates over time
+        """
+        step_size = r_vortice / self.step_frac
+        drift_positions = np.zeros((self.n_vortice, 120, 2))
+
+        ang_step_size = (step_size / self.ysize) * 180
+        max_ang_drift = (max_drift_radius / self.ysize) * 180
+
+        center_lat_rad = np.radians(center_lat)
+
+        step_lon = ang_step_size * np.cos(self.drift_angles) / np.cos(center_lat_rad)
+        step_lat = ang_step_size * np.sin(self.drift_angles)
+
+        cumulative_lon = np.zeros((self.n_vortice, 120))
+        cumulative_lat = np.zeros((self.n_vortice, 120))
+
+        for t_idx in range(120):
+            if t_idx == 0:
+                proposed_lon = step_lon[:, 0]
+                proposed_lat = step_lat[:, 0]
+            else:
+                proposed_lon = cumulative_lon[:, t_idx - 1] + step_lon[:, t_idx]
+                proposed_lat = cumulative_lat[:, t_idx - 1] + step_lat[:, t_idx]
+            
+            ang_dist = np.sqrt(proposed_lat**2 + (proposed_lon * np.cos(center_lat_rad))**2)
+
+            within_bounds = ang_dist <= max_ang_drift
+            
+            if t_idx == 0:
+                cumulative_lon[:, t_idx] = np.where(within_bounds, proposed_lon, 0.0)
+                cumulative_lat[:, t_idx] = np.where(within_bounds, proposed_lat, 0.0)
+            else:
+                cumulative_lon[:, t_idx] = np.where(
+                    within_bounds, 
+                    proposed_lon, 
+                    cumulative_lon[:, t_idx - 1]
+                )
+                cumulative_lat[:, t_idx] = np.where(
+                    within_bounds, 
+                    proposed_lat, 
+                    cumulative_lat[:, t_idx - 1]
+                )
+        
+        # Package results: shape (n_vortice, 120, 2)
+        drift_positions = np.zeros((self.n_vortice, 120, 2))
+        drift_positions[:, :, 0] = cumulative_lon  # longitude degrees
+        drift_positions[:, :, 1] = cumulative_lat  # latitude degrees
+        
+        return drift_positions
     
     def _circle_vortice_vectorized(self, im, lat1, lat2, t, group, modu_config):
         """
@@ -607,7 +669,6 @@ class AtmosphericModel:
         
         # Time-dependent longitudinal positions
         long_positions = self._equidistant_longitudes_degrees(t, planet_period)
-        step_size = r_vortice / 2
         max_drift_radius = r_vortice / 2
         
         # Use actual number of available positions (in case fewer than n_vortice)
@@ -621,8 +682,13 @@ class AtmosphericModel:
         lat_grid = 90 - (self.yy / self.ysize) * 180
 
         if self.drift == True:
+            if self.step_frac != None:
+                step_size = r_vortice / self.step_frac
+            else:
+                step_size = r_vortice / 10
+
             if self.drift_positions is None:
-                self.drift_positions = self.add_drift(step_size, max_drift_radius, center_lat)
+                self.drift_positions = self._add_drift(step_size, max_drift_radius, center_lat)
             
             t_idx = int(t) % 120
 
@@ -681,46 +747,22 @@ class AtmosphericModel:
         # Create circular masks for all vortices (shape: n_vortice, H, W)
         circle_masks = distance_stereo <= r_stereo
         
-        # Apply latitude mask to all vortices
-        #circle_masks = circle_masks & lat_mask[np.newaxis, :, :]
-        
         # Compute flux contributions for each vortex (shape: n_vortice, H, W)
         flux_contributions = np.abs((polar_background + variableflux[:, np.newaxis])) * circle_masks
 
         # Sum all vortex contributions and add to image
         im[polar_indices] += np.sum(flux_contributions, axis=0)
+        
         return im
 
-    def _equidistant_longitudes_degrees(self, t, rotation_period):
-        """
-        Calculate equidistant longitudes for vortice centers in degrees.
-
-        Parameters:
-            n_vortices (int): number of vortices
-            t (float): time
-            rotation_period (float): rotation period of object
-        
-        Returns:
-            long_positions (array): array of longitude positions in degrees [0, 360)
-        """
-        # Generate evenly spaced base positions in degrees
-        base_pos_deg = np.linspace(0, 360, self.n_vortice + 1)[:-1]
-        
-        # Calculate drift in degrees
-        drift_deg = ((-t % rotation_period) / rotation_period) * 360
-        
-        # Apply drift and wrap to [0, 360)
-        long_positions_deg = (base_pos_deg + drift_deg) % 360
-        
-        return long_positions_deg
-
-    def track_and_plot_vortex_paths(self, t_range, save_path=None):
+    def track_and_plot_vortex_paths(self, t_range, save_path=None, plot_style='line'):
         """
         Track vortex positions over time and plot their paths on a polar cap map.
         
         Args:
             t_range: Array of time steps to track (e.g., np.arange(0, 120, 1))
             save_path: Optional path to save the figure
+            plot_style: 'line' for connected path, 'points' for scatter points
         """
         # Get polar cap configuration
         polar_groups = [g for g in self.config.band_config if g[3].upper() == 'P']
@@ -744,7 +786,7 @@ class AtmosphericModel:
             r_vortice = np.sqrt(0.02 * area_cap) * (self.xsize / np.pi)
             step_size = r_vortice / 2
             max_drift_radius = r_vortice / 2
-            self.drift_positions = self.add_drift(step_size, max_drift_radius, center_lat)
+            self.drift_positions = self._add_drift(step_size, max_drift_radius, center_lat)
             print(f"Generated drift positions: {self.drift_positions.shape}")
         
         print(f"Drift positions shape: {self.drift_positions.shape}")
@@ -805,18 +847,23 @@ class AtmosphericModel:
             print(f"  Lon: min={lons.min():.2f}, max={lons.max():.2f}, mean={lons.mean():.2f}")
             print(f"  Lat: min={lats.min():.2f}, max={lats.max():.2f}, mean={lats.mean():.2f}")
             
-            # Plot path with thicker line
-            line = ax1.plot(lons, lats, '-', color=colors[i], alpha=0.8, linewidth=3, 
-                    label=f'Vortex {i+1}', zorder=5)
-            print(f"  Plotted line: {line}")
-            
-            # Start marker
-            ax1.plot(lons[0], lats[0], 'o', color=colors[i], markersize=12, 
-                    markeredgecolor='black', markeredgewidth=2, zorder=10)
-            
-            # End marker
-            ax1.plot(lons[-1], lats[-1], 's', color=colors[i], markersize=12,
-                    markeredgecolor='black', markeredgewidth=2, zorder=10)
+            if plot_style == 'line':
+                # Plot path with thicker line
+                line = ax1.plot(lons, lats, '-', color=colors[i], alpha=0.8, linewidth=3, 
+                        label=f'Vortex {i+1}', zorder=5)
+                print(f"  Plotted line: {line}")
+                
+                # Start marker
+                ax1.plot(lons[0], lats[0], 'o', color=colors[i], markersize=12, 
+                        markeredgecolor='black', markeredgewidth=2, zorder=10)
+                
+                # End marker
+                ax1.plot(lons[-1], lats[-1], 's', color=colors[i], markersize=12,
+                        markeredgecolor='black', markeredgewidth=2, zorder=10)
+            else:
+                # Plot as scatter points
+                ax1.scatter(lons, lats, c=[colors[i]]*len(lons), s=50, alpha=0.8,
+                           label=f'Vortex {i+1}', zorder=5, edgecolors='black', linewidths=0.5)
         
         ax1.set_xlim(0, 360)
         ax1.set_ylim(lat2 - 2, lat1 + 2)
@@ -857,15 +904,20 @@ class AtmosphericModel:
             print(f"  x: min={x.min():.2f}, max={x.max():.2f}")
             print(f"  y: min={y.min():.2f}, max={y.max():.2f}")
             
-            # Plot path
-            ax2.plot(x, y, '-', color=colors[i], alpha=0.8, linewidth=3,
-                    label=f'Vortex {i+1}', zorder=5)
-            
-            # Markers
-            ax2.plot(x[0], y[0], 'o', color=colors[i], markersize=12,
-                    markeredgecolor='black', markeredgewidth=2, zorder=10)
-            ax2.plot(x[-1], y[-1], 's', color=colors[i], markersize=12,
-                    markeredgecolor='black', markeredgewidth=2, zorder=10)
+            if plot_style == 'line':
+                # Plot path
+                ax2.plot(x, y, '-', color=colors[i], alpha=0.8, linewidth=3,
+                        label=f'Vortex {i+1}', zorder=5)
+                
+                # Markers
+                ax2.plot(x[0], y[0], 'o', color=colors[i], markersize=12,
+                        markeredgecolor='black', markeredgewidth=2, zorder=10)
+                ax2.plot(x[-1], y[-1], 's', color=colors[i], markersize=12,
+                        markeredgecolor='black', markeredgewidth=2, zorder=10)
+            else:
+                # Plot as scatter points
+                ax2.scatter(x, y, c=[colors[i]]*len(x), s=50, alpha=0.8,
+                           label=f'Vortex {i+1}', zorder=5, edgecolors='black', linewidths=0.5)
         
         # Draw circles
         circle_inner = Circle((0, 0), r_inner, fill=False, edgecolor='gray',
@@ -923,6 +975,15 @@ class AtmosphereVisualizer:
         speckey (dict): maps regions to spectral values
         imsize (list): length and width values in pixels defining map size
         plotter (class instance): specific plotter object
+        _limb_mask_cache: cache for limb darkening mask
+    
+    Methods:
+        configure_plotter(zoom_factor): configure PyVista plotter with proper camera setup
+        _apply_limb_darkening(grayscale, u_coefficient): apply limb darkening to grayscale image with caching
+        im_posterize(img): posterize grayscale image by mapping to nearest speckey value
+        render_specmask(specmap, posterize): render spectral mask with full sphere visible
+        render_frame(atmospheric_data, colorlim, apply_limb_darkening, u_coefficient): render single timestep with full sphere visible
+        photometry(config, model, inclin): generate photometry images over time
     """
     def __init__(self, mesh, speckey, config, imsize=(300, 300), inclination=0):
         self.mesh = mesh
@@ -1014,44 +1075,10 @@ class AtmosphereVisualizer:
         _, mask = self._limb_mask_cache
         return grayscale * mask
 
-    # def im_posterize(self, img, tol=15, n_clusters=4, min_count=20):
-    #     """Posterize grayscale image using KMeans clustering and remap to speckey values"""
-    #     target_values = np.array(list(self.speckey.values()), dtype=np.uint8)
-
-    #     # Flatten to 1D array of intensities
-    #     pixels = img.ravel()
-
-    #     # Filter out rare/noisy intensities
-    #     unique, counts = np.unique(pixels, return_counts=True)
-    #     valid = unique[counts >= min_count]
-    #     filtered_pixels = pixels[np.isin(pixels, valid)]
-
-    #     if filtered_pixels.size == 0:
-    #         return np.zeros_like(img, dtype=np.uint8), {}
-
-    #     # Run KMeans on filtered values
-    #     X = filtered_pixels.reshape(-1, 1)
-    #     kmeans = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
-    #     kmeans.fit(X)
-
-    #     # Round centroids to nearest integers and sort them
-    #     centroids = np.sort(np.rint(kmeans.cluster_centers_.flatten()).astype(int))
-
-    #     # Map sorted centroids to speckey values (smallest->0, next->80, etc.)
-    #     centroid_map = dict(zip(centroids, target_values))
-
-    #     # Create output image initialized to 0
-    #     output_img = np.zeros_like(img, dtype=np.uint8)
-
-    #     # Apply mapping: within tolerance of centroid -> mapped speckey value
-    #     for c, mapped_val in centroid_map.items():
-    #         mask = np.abs(img.astype(int) - int(c)) <= tol
-    #         output_img[mask] = mapped_val
-
-    #     return output_img #, centroid_map
-
     def im_posterize(self, img):
-        """Posterize grayscale image by mapping to nearest speckey value"""
+        """
+        Posterize grayscale image by mapping to nearest speckey value.
+        """
         target_values = np.array(sorted(self.speckey.values()), dtype=np.uint8)  # [0, 150, 200, 250]
         
         # For each pixel, find the nearest target value
@@ -1064,8 +1091,6 @@ class AtmosphereVisualizer:
         
         return np.array(output_img.reshape(img.shape).astype(np.uint8))
 
-    def render_specmask(self, specmap, posterize=True):
-        """Render spectral mask with full sphere visible"""
     def render_specmask(self, specmap, posterize=False):
         """
         Render spectral mask with full sphere visible.
@@ -1209,19 +1234,31 @@ class AtmosphereVisualizer:
 # ==============================================================================
 class LightcurveGenerator:
     """
-    Compute photometric lightcurves from gray_array and specmask,
-    with vectorized flux calculation for efficiency.
+    Compute photometric lightcurves from gray_array and specmask, with
+    vectorized flux calculation for efficiency.
+
+    Attributes:
+        results: results of lightcurve calculations
+    
+    Methods:
+        generate_all(): run flux generation for all inclinations in results
+        _generate_flux(): compute normalized fluxes and area fractions for a single inclination.
+        plot_all_inclinations(flux_type, normalize, figsize, alpha): plot lightcurves for all inclinations on the same plot
     """
     def __init__(self, results: dict):
         self.results = results
 
     def generate_all(self):
-        """Run flux generation for all inclinations in results."""
+        """
+        Run flux generation for all inclinations in results.
+        """
         for inclination, data in self.results.items():
             self.results[inclination]['flux'] = self._generate_flux(data)
 
     def _generate_flux(self, data: dict) -> dict:
-        """Compute normalized fluxes and area fractions for a single inclination."""
+        """
+        Compute normalized fluxes and area fractions for a single inclination.
+        """
         # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
         """Compute normalized fluxes and area fractions for a single inclination."""
         print(f"Debug - type of sum function: {type(sum)}")
@@ -1305,6 +1342,7 @@ class LightcurveGenerator:
                                 figsize=(10, 6), alpha=0.8):
             """
             Plot lightcurves for all inclinations on the same plot
+            
             Parameters
             ----------
             flux_type : str, optional
@@ -1395,7 +1433,19 @@ class LightcurveGenerator:
 # ============================================================================
 
 def process_single_inclination(inclin, config, mesh, model, colorlim):
-    """Top-level function for multiprocessing"""
+    """
+    Top-level function for multiprocessing for single inclination.
+
+    Args:
+        inclin (array): inclinations to be processed
+        config (class instance): AtmosphericConfig object with atmospheric configuration parameters
+        mesh (class instance): SphericalMesh object
+        model (class instance): AtmosphericModel object
+    
+    Returns:
+        dictionary containing:
+            gray_array, time_array, metadata, specmask, limb_mask_cache
+    """
     visualizer = AtmosphereVisualizer(mesh=mesh, 
                                       speckey=config.speckey,
                                       config=config,
@@ -1414,10 +1464,9 @@ def process_single_inclination(inclin, config, mesh, model, colorlim):
         'limb_mask_cache': visualizer._limb_mask_cache
     }
 
-def process_time_chunk(inclin, time_chunk, config, mesh, model, colorlim):
+def process_time_chunk(inclin, time_chunk, config, mesh, model):
     """
     Process a chunk of timesteps for a given inclination.
-    This reuses the plotter across multiple frames.
     
     Parameters:
         inclin: inclination angle
@@ -1428,10 +1477,14 @@ def process_time_chunk(inclin, time_chunk, config, mesh, model, colorlim):
         colorlim: color limits
     
     Returns:
-        dict with frames for this chunk
+        dict with frames for specific chunk
     """
+
+    colorlim = config.colorlim
+
     visualizer = AtmosphereVisualizer(mesh=mesh, 
                                       speckey=config.speckey,
+                                      config=config,
                                       imsize=[300, 300], 
                                       inclination=inclin)
     
@@ -1458,6 +1511,22 @@ def process_time_chunk(inclin, time_chunk, config, mesh, model, colorlim):
 # Run the simulation and visualization
 #===============================================================================
 class SimulationRunner:
+    """
+    Runs the entire simulation process.
+
+    Attributes:
+        mesh (class instance): SphericalMesh object
+        config (class instance): AtmosphericConfig object
+        model (class instance): AtmosphericModel object
+        inclinations (arrays): array of all inclinations to be simulated
+    
+    Methods:
+        run_simulation(n_workers, chunk_size): runs simulation for given inclinations with multiprocessing
+        save_simulation(prefix, compression): saves simulation results to a h5 file
+        save_video_from_array(gray_array, filepath, fps, cmap, clim): save grayscale array as video with colormap applied
+        create_video_from_h5(prefix, fps, clim, apply_limb_darkening, n_workers): create grayscale videos for each inclination stored in an HDF5 file
+        _create_single_video(h5_file_path, inclin, video_path, fps, clim, apply_limb_darkening): helper function to create a single video (for parallel processing)
+    """
     def __init__(self, mesh, config, model, inclinations, base_path='output'):
         self.mesh = mesh
         self.config = config  # Directly use the provided AtmosphericConfig instance
@@ -1473,7 +1542,26 @@ class SimulationRunner:
 
         self.results = {}
 
-    def run_simulation(self, colorlim=[0.0, 1.0], n_workers=10, chunk_size=40):
+    ### Running the simulation with multi-inclination processing
+    # def run_simulation(self, colorlim=[0.5, 1.5], n_workers=4):
+    #     from multiprocessing import Pool
+    #     start = time.perf_counter()
+        
+    #     args_list = [(inclin, self.config, self.mesh, self.model, colorlim)
+    #                 for inclin in self.inclinations]
+        
+    #     with Pool(processes=n_workers) as pool:
+    #         results_list = pool.starmap(process_single_inclination, args_list)
+        
+    #     self.results = dict(zip(self.inclinations, results_list))
+        
+    #     end = time.perf_counter()
+    #     print(f"Simulation completed in {end - start:.2f} seconds.")
+    
+    #     return self.results
+
+    ### Running the simulation with multi-chunk processing
+    def run_simulation(self, colorlim=[0.0, 1.0], n_workers=6, chunk_size=40):
         """
         Run simulation with chunk-based parallelization.
         Each worker processes multiple frames to amortize plotter setup cost.
@@ -1499,7 +1587,7 @@ class SimulationRunner:
         
         # Create tasks: (inclination, time_chunk) pairs
         args_list = [
-            (inclin, chunk, self.config, self.mesh, self.model, colorlim)
+            (inclin, chunk, self.config, self.mesh, self.model)
             for inclin in self.inclinations
             for chunk in time_chunks
         ]
@@ -1531,15 +1619,22 @@ class SimulationRunner:
             specmap = self.model.generate_specmap()
             visualizer = AtmosphereVisualizer(mesh=self.mesh, 
                                             speckey=self.config.speckey,
+                                            config=self.config,
                                             imsize=[300, 300], 
                                             inclination=inclin)
             specmask = visualizer.render_specmask(specmap, posterize=False)
             
+            # Generate limb mask by rendering a dummy frame
+            dummy_atm = self.model.generate_atmosphere(0)
+            _ = visualizer.render_frame(dummy_atm, self.config.colorlim, apply_limb_darkening=True)
+            limb_mask_cache = visualizer._limb_mask_cache
+
             self.results[inclin] = {
                 'gray_array': all_frames,
                 'time_array': time_array,
-                'metadata': self.config.__dict__,
+                'metadata': self.config._to_dict(),
                 'specmask': specmask,
+                'limb_mask_cache': limb_mask_cache,
             }
         
         end = time.perf_counter()
@@ -1694,16 +1789,22 @@ class SimulationRunner:
     
     @staticmethod
     def _create_single_video(h5_file_path, inclin, video_path, fps, clim, apply_limb_darkening):
-        """Helper function to create a single video (for parallel processing)."""
+        """
+        Helper function to create a single video (for parallel processing).
+        """
         with h5py.File(h5_file_path, 'r') as f:
             gray_array = f[f'{inclin}/gray_array'][:]
             
             if apply_limb_darkening:
-                limb_mask = f[f'{inclin}/limb_mask_cache_mask']
-                gray_array = limb_mask * gray_array
+                # Check if limb mask exists before trying to use it
+                limb_mask_key = f'{inclin}/limb_mask_cache_mask'
+                if limb_mask_key in f:
+                    limb_mask = f[limb_mask_key][:]
+                    gray_array = limb_mask * gray_array
+                else:
+                    print(f"Warning: limb_mask_cache_mask not found for inclination {inclin}, skipping limb darkening")
         
         SimulationRunner.save_video_from_array(gray_array, video_path, fps=fps, clim=clim)
-
 # ==============================================================================
 # Light curve generation and plotting
 # ==============================================================================
@@ -1711,8 +1812,15 @@ class LightcurveGenerator:
     """
     Compute photometric lightcurves from gray_array and specmask,
     with vectorized flux calculation for efficiency.
+    
+    Attributes:
+        results (dict): simulation results
+    
+    Methods:
+        generate_all(): run flux generation for all inclinations in results
+        _generate_flux(data): compute normalized fluxes and area fractions for singlie inclination
+        plot_all_inclinations(flux_type, normalize, figsize, alpha): plot lightcurves for all inclinations on the same plot
     """
-
     def __init__(self, results: dict):
         self.results = results
 
@@ -1724,7 +1832,6 @@ class LightcurveGenerator:
     def _generate_flux(self, data: dict) -> dict:
         """Compute normalized fluxes and area fractions for a single inclination."""
         # Convert gray_array (list of RGB frames) → ndarray (t, h, w, 3), float32
-        """Compute normalized fluxes and area fractions for a single inclination."""
         print(f"Debug - type of sum function: {type(sum)}")
         print(f"Debug - sum function: {sum}")
         gray_array = np.array(data['gray_array'], dtype=np.float32)   # shape (t, h, w, 3)
@@ -1812,110 +1919,110 @@ class LightcurveGenerator:
             'fluxtotal': fluxtotal
         }
 
-    def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, 
-                                figsize=(10, 6), alpha=0.8):
-            """
-            Plot lightcurves for all inclinations on the same plot
-            Parameters
-            ----------
-            flux_type : str, optional
-                Which flux to plot. Options: 'fluxtotal', 'fluxA', 'fluxB', 'fluxP', etc.
-                Default is 'fluxtotal' to show total flux from all regions.
-            normalize : bool, optional
-                If True, normalize each lightcurve by its own maximum value.
-            figsize : tuple, optional
-                Figure size (width, height) in inches.
-            alpha : float, optional
-                Line transparency (0-1).
-            """
-            import matplotlib.pyplot as plt
-            
-            # Check if flux data exists
-            flux_data_available = {inc: self.results[inc].get('flux', None) 
-                                for inc in self.results.keys()}
-            
-            missing_flux = [inc for inc, data in flux_data_available.items() if data is None]
-            if missing_flux:
-                raise ValueError(f"No flux data found for inclinations {missing_flux}. "
-                                "Run generate_all() first.")
+    def plot_all_inclinations(self, flux_type='fluxtotal', normalize=False, figsize=(10, 6), alpha=0.8):
+        """
+        Plot lightcurves for all inclinations on the same plot.
 
-            # Determine available flux types from first inclination
-            first_flux_data = list(flux_data_available.values())[0]
-            available_flux_types = [k for k in first_flux_data.keys() 
-                                if k.startswith('flux') or k == 'fluxtotal']
-            
-            if flux_type not in available_flux_types:
-                raise ValueError(f"Flux type '{flux_type}' not found. "
-                                f"Available types: {available_flux_types}")
+        Parameters
+        ----------
+        flux_type : str, optional
+            Which flux to plot. Options: 'fluxtotal', 'fluxA', 'fluxB', 'fluxP', etc.
+            Default is 'fluxtotal' to show total flux from all regions.
+        normalize : bool, optional
+            If True, normalize each lightcurve by its own maximum value.
+        figsize : tuple, optional
+            Figure size (width, height) in inches.
+        alpha : float, optional
+            Line transparency (0-1).
+        """
+        import matplotlib.pyplot as plt
+        
+        # Check if flux data exists
+        flux_data_available = {inc: self.results[inc].get('flux', None) 
+                            for inc in self.results.keys()}
+        
+        missing_flux = [inc for inc, data in flux_data_available.items() if data is None]
+        if missing_flux:
+            raise ValueError(f"No flux data found for inclinations {missing_flux}. "
+                            "Run generate_all() first.")
 
-            plt.figure(figsize=figsize)
-            
-            # Sort inclinations for consistent color progression
-            sorted_inclinations = sorted(self.results.keys())
-            
-            # Create color gradient based on inclination
-            colors = plt.cm.gist_rainbow(np.linspace(0, 1, len(sorted_inclinations)))
-            
-            # Calculate normalization factor if requested
-            normalization_factor = 1.0
-            if normalize:
-                # Calculate average flux for each inclination (after baseline correction)
-                avg_fluxes = []
-                for inclination in sorted_inclinations:
-                    flux_data = self.results[inclination]['flux']
-                    flux = flux_data[flux_type]
-                    
-                    # Apply baseline correction first (shift to same baseline)
-                    flux_corrected = flux - np.min(flux)
-                    avg_flux = np.mean(flux_corrected)
-                    avg_fluxes.append(avg_flux)
-                
-                # Use maximum average flux as normalization factor
-                if avg_fluxes:
-                    normalization_factor = max(avg_fluxes)
-                    print(f"Debug - Average fluxes by inclination (baseline-corrected): {dict(zip(sorted_inclinations, avg_fluxes))}")
-                    print(f"Debug - Normalization factor (max avg): {normalization_factor}")
-            
-            for inclination, color in zip(sorted_inclinations, colors):
+        # Determine available flux types from first inclination
+        first_flux_data = list(flux_data_available.values())[0]
+        available_flux_types = [k for k in first_flux_data.keys() 
+                            if k.startswith('flux') or k == 'fluxtotal']
+        
+        if flux_type not in available_flux_types:
+            raise ValueError(f"Flux type '{flux_type}' not found. "
+                            f"Available types: {available_flux_types}")
+
+        plt.figure(figsize=figsize)
+        
+        # Sort inclinations for consistent color progression
+        sorted_inclinations = sorted(self.results.keys())
+        
+        # Create color gradient based on inclination
+        colors = plt.cm.gist_rainbow(np.linspace(0, 1, len(sorted_inclinations)))
+        
+        # Calculate normalization factor if requested
+        normalization_factor = 1.0
+        if normalize:
+            # Calculate average flux for each inclination (after baseline correction)
+            avg_fluxes = []
+            for inclination in sorted_inclinations:
                 flux_data = self.results[inclination]['flux']
-                time = flux_data['time']
                 flux = flux_data[flux_type]
                 
-                # Apply baseline correction (shift to same baseline)
-                flux_shifted = flux - np.min(flux)
-                
-                # Normalize by maximum average flux across all inclinations
-                if normalize and normalization_factor > 0:
-                    flux_final = flux_shifted / normalization_factor
-                else:
-                    flux_final = flux_shifted
-                
-                plt.plot(time, flux_final, label=f'{inclination}°', 
-                        color=color, alpha=alpha, linewidth=1.5)
+                # Apply baseline correction first (shift to same baseline)
+                flux_corrected = flux - np.min(flux)
+                avg_flux = np.mean(flux_corrected)
+                avg_fluxes.append(avg_flux)
+            
+            # Use maximum average flux as normalization factor
+            if avg_fluxes:
+                normalization_factor = max(avg_fluxes)
+                print(f"Debug - Average fluxes by inclination (baseline-corrected): {dict(zip(sorted_inclinations, avg_fluxes))}")
+                print(f"Debug - Normalization factor (max avg): {normalization_factor}")
+        
+        for inclination, color in zip(sorted_inclinations, colors):
+            flux_data = self.results[inclination]['flux']
+            time = flux_data['time']
+            flux = flux_data[flux_type]
+            
+            # Apply baseline correction (shift to same baseline)
+            flux_shifted = flux - np.min(flux)
+            
+            # Normalize by maximum average flux across all inclinations
+            if normalize and normalization_factor > 0:
+                flux_final = flux_shifted / normalization_factor
+            else:
+                flux_final = flux_shifted
+            
+            plt.plot(time, flux_final, label=f'{inclination}°', 
+                    color=color, alpha=alpha, linewidth=1.5)
 
-            plt.xlabel("Time (hours)")
-            ylabel = "Normalized Intensity" if normalize else "Intensity"
-            plt.ylabel(ylabel)
-            plt.title(f"Lightcurves for All Inclinations: [{flux_type}]")
-            
-            # Create a nice legend
-            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
-                    title='Inclination')
-            
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.show()
+        plt.xlabel("Time (hours)")
+        ylabel = "Normalized Intensity" if normalize else "Intensity"
+        plt.ylabel(ylabel)
+        plt.title(f"Lightcurves for All Inclinations: [{flux_type}]")
+        
+        # Create a nice legend
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
+                title='Inclination')
+        
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.show()
 
 # ==============================================================================
 # Set up configurations and test call
 # =============================================================================
 
-def main():
+if __name__ == "__main__":
     # VTK and OpenGL check
     print("VTK Version:", vtk.vtkVersion.GetVTKVersion())
     print("OpenGL2 Enabled:", hasattr(vtk, 'vtkOpenGLRenderWindow'))
 
-    runName = 'test_discrete_new2'  # Simulation identifier
+    runName = 'test_polar_v0'  # Simulation identifier
 
     # Set up band_config: latitudinal features
     Ppol, Pband, Prot = 60, 5, 5  # Periods in hours
@@ -1927,7 +2034,6 @@ def main():
     [latUp, latDown, brightness, type, phase, period, variability] 
     '''
 
-    runName = 'test_limbdark'  # Simulation identifier
     bandConfig = [
         # [lat2, lat1, amplitude, type, phase, period]
         [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
@@ -1938,10 +2044,12 @@ def main():
         [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]
     ]
 
+    random_seed = 11
     n_vortice = 5
     radius_frac = 0.00525
     drift = True
-    vortexConfig = [n_vortice, radius_frac, drift]
+    step_frac = 5
+    vortexConfig = [random_seed, n_vortice, radius_frac, drift, step_frac]
 
     # Set up atmosphere config: the rest of the simulation
     atmo_config = AtmosphericConfig(
@@ -1979,7 +2087,7 @@ def main():
     results = runner.run_simulation() 
     
     # Usage example:
-    model.track_and_plot_vortex_paths(np.arange(0, 120, 1), save_path='vortex_paths.png')
+    model.track_and_plot_vortex_paths(np.linspace(0, 120, 12), save_path='vortex_paths.png', plot_style='points')
 
     # Save the simulation results
     runner.save_simulation(runName)
@@ -2033,7 +2141,7 @@ def main():
     if True:
         filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
         for inc in incli_array:
-            for t in range(10):
+            for t in range(1, 60, 5):
                 binned = plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
 
     ### Plot horizontal colorbar
@@ -2071,7 +2179,3 @@ def main():
 
     # Compare flux types for specific inclination
     # lc_generator.plot_flux_comparison(inclination=40)
-
-
-if __name__ == "__main__":
-    main()
