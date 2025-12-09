@@ -1750,7 +1750,10 @@ if __name__ == "__main__":
     # runName = 'test_polarMonitor_dynamic'  # Simulation identifier
 
     # runName = 'test_polar_v0_static'
-    runName = 'test_polar_v0_dynamic'
+    # runName = 'test_polar_v0_dynamic'
+
+    runName = 'polar_v1_static_baseline240'
+    # runName = 'polar_v1_dynamic_baseline240'
 
     # Set up band_config: latitudinal features
     Ppol, Pband, Prot = 60, 5, 5  # Periods in hours
@@ -1786,7 +1789,8 @@ if __name__ == "__main__":
         # modu_config='polarStatic',
         modu_config='polarDynamic',
         modelname='production1',
-        time_config=TimeConfig(t0=0, t1=60, frames=120, option='full'),
+        # time_config=TimeConfig(t0=0, t1=60, frames=120, option='full'),
+        time_config=TimeConfig(t0=0, t1=240, frames=240, option='full'),
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,

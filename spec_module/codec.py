@@ -860,16 +860,22 @@ class CodecSystem:
             if frame_index is not None:
                 # Load single frame
                 group = f[f'frame_{frame_index}']
-                return [group['time'][()], group['wavelength'][:], group['flux'][:]
-                ]
+                return {
+                    'time': group['time'][()],
+                    'wave': group['wavelength'][:],
+                    'flux': group['flux'][:]
+                }
             else:
                 # Load all frames
                 n_frames = f.attrs['n_frames']
-                composite_spectra_ts = []
+                composite_spectra_ts = {}
                 for i in range(n_frames):
                     group = f[f'frame_{i}']
-                    composite_spectra_ts.append([group['time'][()], group['wavelength'][:], group['flux'][:]
-                    ])
+                    composite_spectra_ts[i] = {
+                        'time': group['time'][()],
+                        'wave': group['wavelength'][:],
+                        'flux': group['flux'][:]
+                    }
                 return composite_spectra_ts
 
     def get_spectra_info(self):
@@ -1262,8 +1268,8 @@ if __name__ == "__main__":
         plt.tight_layout()
         handle = f'spectra_analysis_i={inclin}.pdf'
         outpath = os.path.join(runpath, handle)
-        plt.savefig(outpath, dpi=150, bbox_inches='tight')
-        print("\nSaved visualization to ", handle)
+        # plt.savefig(outpath, dpi=150, bbox_inches='tight')
+        # print("\nSaved visualization to ", handle)
         plt.show()
         plt.close()
 
