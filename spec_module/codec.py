@@ -1,4 +1,4 @@
-# demo_codec.py
+# codec.py
 import numpy as np
 import json
 import os
@@ -10,6 +10,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import glob
+import pickle
 
 #%%
 class CodecSystem:
@@ -1017,16 +1018,24 @@ def digitize_frames(results, bins):
 
 if __name__ == "__main__":
     # Load your data
-    # path = os.path.join(
-    #     '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/',
-    #     'test_discrete.h5')
-    path = os.path.join(
-        '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/',
-        'test_polar_v0_static.h5')
-
-    results = readPhotometry(path)
+    photometryh5dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
     
-    runname = 'timeSeries_'+f'1200k_clouds=10_polarStatic'
+    # photrunName = 'test_polar_v0_static.h5'
+    photrunName = 'test_polar_v0_dynamic.h5'
+    # photrunName = 'polar_v1_static_baseline120.h5'
+
+    # photrunName = 'jwst_v0_static.h5'
+
+    path = os.path.join(photometryh5dir, photrunName)
+    results = readPhotometry(path)
+
+    specConfigName = f'1200k_clouds=20'
+    
+    runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
+
+    print("\n===== CODEC PROCESSING =====")
+    print(f"Running photometry configuration: {runname}")
+
     if False:
         runname += f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
 
@@ -1053,9 +1062,19 @@ if __name__ == "__main__":
     
     ### Search for .csv files in the specified directory
     dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
-    # specpath = dir+'bd_grid_20251108_162457_all5condensates'
-    specpath = os.path.join(dir, 'bd_grid_20251202_simple3clouds')
+    # specFolderName = 'bd_grid_20251108_162457_all5condensates'
+    # specFolderName = 'bd_grid_20251202_simple3clouds'
+    specFolderName = 'bd_grid_noCH4_20251209_153457'
 
+    specpath = os.path.join(dir, specFolderName)
+    specSummary = pickle.load(open(os.path.join(specpath, 'results_summary.pkl'), 'rb'))
+
+    modelID_list = [picasomodelfile['model_id'] for picasomodelfile in specSummary]
+    print(f"\nFound {len(modelID_list)} model IDs in the summary:")
+    print(modelID_list)
+    print("\nSample params file: ")
+    print(specSummary[0]['params'])
+    
     csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
     print(f"Found {len(csv_files)} .csv files in {specpath}")
 
@@ -1089,7 +1108,7 @@ if __name__ == "__main__":
     print("\n### Processing Time Series ###")
     
     for inclin in results.keys():
-    # for inclin in ['40']:
+    # for inclin in ['0', '40']:
         results_ts = None
 
         # Calculate Composite Spectra for All Frames
@@ -1110,7 +1129,7 @@ if __name__ == "__main__":
         spectsPath = os.path.join(runpath, f'composite_spectra_i={inclin}.h5')
         # Save the spectra timeseries
         codec.save_composite_spectra_timeseries(composite_spectra_ts, spectsPath)
-    
+        
         # ===== Visualization: Compare Individual vs Composite =====
         print("\n### Visualizing Spectra ###")
 
@@ -1125,14 +1144,14 @@ if __name__ == "__main__":
         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
         ax.set_title('Individual Spectra')
         ax.legend(fontsize=5)
-        ax.set_yscale('log')
+        ax.set_yscale('linear')
         ax.grid(True, alpha=0.3)
 
         # ===== Plot 2: Light curves for specific wavelength bin =====
         ax = axes[0,1]
 
         # Define wavelength bins
-        wavebin = [(2.0, 2.1, 'red'),
+        wavebin = [(2.8, 2.9, 'red'),
                 (2.4, 2.5, 'blue'),]
 
         # Extract light curves for each bin
@@ -1150,15 +1169,16 @@ if __name__ == "__main__":
             
             # Plot light curve
             ax.plot(time_indices, flux_timeseries, 
-                    marker='o', linestyle='-', color=color, 
-                    linewidth=2, markersize=4,
+                    marker='o', linestyle='-', color=color,
+                    alpha=0.7, 
+                    linewidth=1, markersize=2,
                     label=f'{wmin}-{wmax} μm')
 
             # Highlight specific timepoint
-            for i,xid in enumerate([30, 60, 90]):
+            for i,xid in enumerate([26, 58, 90]):
                 color_list = ['orange', 'green', 'purple']
                 ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
-                        marker='*', markersize=12, color=color_list[i],)
+                        marker='*', markersize=10, color=color_list[i],)
 
         ax.set_xlabel('Frame Index')
         ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
@@ -1202,20 +1222,20 @@ if __name__ == "__main__":
         #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
         #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
         
-        frameA, waveA, fluxA = composite_spectra_ts[30]
-        frameB, waveB, fluxB = composite_spectra_ts[60]
+        frameA, waveA, fluxA = composite_spectra_ts[26]
+        frameB, waveB, fluxB = composite_spectra_ts[58]
         frameC, waveC, fluxC = composite_spectra_ts[90]
 
-        ax.plot(waveA, fluxA/fluxB, lw=1, label=f'Frame A / Frame B')
-        ax.plot(waveA, fluxA/fluxC, lw=1, label=f'Frame A / Frame C')
-        ax.plot(waveA, fluxB/fluxC, lw=1, label=f'Frame B / Frame C')
+        ax.plot(waveA, fluxA/fluxB, lw=1, label=f'max / mid')
+        ax.plot(waveA, fluxA/fluxC, lw=1, label=f'max / min')
+        ax.plot(waveA, fluxB/fluxC, lw=1, label=f'mid / min')
 
         ax.set_xlabel('Wavelength (μm)')
         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
         ax.set_title(f'Composite Spectra Ratio; i={inclin}')
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
-        ax.set_ylim(1.0, 1.012)
+        # ax.set_ylim(1.0, 1.10)
 
         # ===== Plot 5: Periodogram of second lightcurve in hours x-axis =====
         ax = axes[2, 0]
@@ -1257,7 +1277,7 @@ if __name__ == "__main__":
                                  aspect='equal')  # Set aspect to 'equal'
             sub_ax.set_xticks([])
             sub_ax.set_yticks([])
-            sub_ax.set_title(f'Time {tp}', fontsize=8)
+            sub_ax.set_title(f't={time_indices[tp]:.1f} hours', fontsize=8)
         ax.set_xticks([])
         ax.set_yticks([])
         # set all spine frames to be invisible
@@ -1266,10 +1286,10 @@ if __name__ == "__main__":
 
         # ==============================
         plt.tight_layout()
-        handle = f'spectra_analysis_i={inclin}.pdf'
+        handle = f'codecSummary_i={inclin}.pdf'
         outpath = os.path.join(runpath, handle)
-        # plt.savefig(outpath, dpi=150, bbox_inches='tight')
-        # print("\nSaved visualization to ", handle)
+        plt.savefig(outpath, dpi=150, bbox_inches='tight')
+        print("\nSaved visualization to ", handle)
         plt.show()
         plt.close()
 
@@ -1279,5 +1299,5 @@ if __name__ == "__main__":
         print(f"Loaded {info['n_spectra']} spectra")
         print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
         print(f"Number of wavelength points: {info['n_wavelength_points']}")
-        
+
 # %%

@@ -134,14 +134,31 @@ class TimeConfig:
         repr(): prints out configured time parameters
 
     # can add "incomplete" time array to account for gaps in observation
-    # ex. [[0, 10], [50, 60], [100, 120]]
+    # ex. compare JWST sparse vs full time array setup:
+        import matplotlib.pyplot as plt
+        
+        # 120 frames over 60 hours
+        t_full = TimeConfig(t0=0, t1=60, frames=120).time_array 
+
+        # 360 frames, 180 hours of observed time over 3 segments
+        # gaps of 60 hours in between, so total time is 180 + 60*2 = 300 hours
+        t_jwst = TimeConfig(t0=0, t1=180, frames=360, option='jwst').time_array
+        # t_jwst = TimeConfig(t0=0, t1=90, frames=120, option='jwst').time_array # or shorter version
+
+        plt.figure(figsize=(2,10))
+        plt.scatter(0.5*np.ones(len(t_full)), t_full, s=0.4)
+        plt.scatter(1.5*np.ones(len(t_jwst)), t_jwst, s=0.4)
+        plt.xlim(0,2)
+
     """
-    def __init__(self, t0=0, t1=60, frames=60, option='full'):
+    def __init__(self, t0=0, t1=60, frames=60, option='full', jwst_setup={'gap':60, 'segments':3}):
         """
         Args:
             t0: Start time (hours)
             t1: End time (hours)
             frames: Number of animation frames
+            option: 'full' for full time array, 'sparse' for sparse sampling, 'jwst' for JWST-like gaps
+            jwst_setup: dict with 'gap' (hours) and 'segments' (int) for JWST mode
         """
         self.t0 = t0
         self.t1 = t1
@@ -160,6 +177,23 @@ class TimeConfig:
             self.dt = s # Time step
             print(f"Sparse mode: every 5 hours over {t1*s} hours; frames ignored")
             self.frames = len(self.time_array)
+
+        if option == 'jwst':
+            # devide t0-t1 into 3 segments with gaps of 60 hours in between
+            # preserving total no of frames
+            gap = jwst_setup['gap'] # hours
+            segment_frames = frames // jwst_setup['segments']  # frames per segment
+            segments = []
+            for i in range(jwst_setup['segments']):
+                start_time = t0 + i * ((t1 - t0) / jwst_setup['segments']) + i * gap
+                end_time = start_time + ((t1 - t0) / jwst_setup['segments'])
+                if i == jwst_setup['segments'] - 1:  # Last segment takes remaining frames
+                    segment_frames = frames - len(segments) * segment_frames
+                segments.append(np.linspace(start_time, end_time, segment_frames, endpoint=False))
+            self.time_array = np.concatenate(segments)
+            self.dt = (t1 - t0 + 2 * gap) / frames  # Average time step
+
+            print(f"JWST mode: 3 segments ({t1-t0} hours)  with gaps of {gap} hours; total time {t1 - t0 + 2 * gap} hours")
 
     def __repr__(self):
         return f"TimeConfig(t0={self.t0}, t1={self.t1}, frames={self.frames}, format={self.option})"
@@ -662,7 +696,7 @@ class AtmosphericModel:
         
         # Handle variable flux based on mode (ensure it's a NumPy array)
         if modu_config == 'polarDynamic':
-            phase_values = np.array([3., 3.5, 2.5, 4, 2.0, 3., 1.5, 5, 2.5, 4.5, 3.0,])
+            phase_values = np.array([0.1, -0.2, 0.4, -0.1, 0.3, 0.2, 0.3, -0.1, -0.4, -0.3, 0.1,])
             variableflux = np.array(vortex_amp * np.sin(2 * np.pi / period * t + phase 
                                                         + phase_values[:self.n_vortice]))
         elif modu_config == 'polarStatic':
@@ -1749,16 +1783,19 @@ if __name__ == "__main__":
     # runName = 'test_polarMonitor_static'  # Simulation identifier
     # runName = 'test_polarMonitor_dynamic'  # Simulation identifier
 
-    # runName = 'test_polar_v0_static'
+    runName = 'test_polar_v0_static'
     # runName = 'test_polar_v0_dynamic'
 
-    runName = 'polar_v1_static_baseline240'
+    # runName = 'polar_v1_static_baseline120'
     # runName = 'polar_v1_dynamic_baseline240'
+
+    # runName = 'jwst_v0_static'
+    # runName = 'jwst_v0_dynamic'
 
     # Set up band_config: latitudinal features
     Ppol, Pband, Prot = 60, 5, 5  # Periods in hours
     Fpolar, Fband, Fambient = 0.98, 1, 1 # amp
-    Fpolar_var, Fband_var, Fambient_var = 0.00, 0.15, 0.00 # variab
+    Fpolar_var, Fband_var, Fambient_var = 0.05, 0.15, 0.00 # variab
     # variability: amp + variab * sin(...)
     ''' 
     bandConfig has to be in this format:
@@ -1783,14 +1820,29 @@ if __name__ == "__main__":
     vortexConfig = [n_vortice, radius_frac, drift, centerLat, ampVortex]
     # vortexConfig = None
 
+    # Set up modu_config: static or dynamic polar monitor
+    if 'static' in runName:
+        moduConfig = 'polarStatic'
+    elif 'dynamic' in runName:
+        moduConfig = 'polarDynamic'
+    else:
+        moduConfig = 'polarStatic'
+
+    if 'jwst' in runName:
+        # Set up time_config: JWST-like observation
+        timeConfigVar = TimeConfig(t0=0, t1=180, frames=360, option='jwst', jwst_setup={'gap':60, 'segments':3})
+    elif 'test' in runName:
+        timeConfigVar = TimeConfig(t0=0, t1=60, frames=120, option='full')
+    else:
+        timeConfigVar = TimeConfig(t0=0, t1=60, frames=120, option='full')
+
     # Set up atmosphere config: the rest of the simulation
     atmo_config = AtmosphericConfig(
         band_config=bandConfig,  # This is your band configuration list
         # modu_config='polarStatic',
-        modu_config='polarDynamic',
+        modu_config=moduConfig,
         modelname='production1',
-        # time_config=TimeConfig(t0=0, t1=60, frames=120, option='full'),
-        time_config=TimeConfig(t0=0, t1=240, frames=240, option='full'),
+        time_config=timeConfigVar,
         Fambient=Fambient,  # This will be accessible as config.Fambient
         Fband=Fband,
         Fpolar=Fpolar,
@@ -1875,8 +1927,8 @@ if __name__ == "__main__":
     if True:
         filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
         for inc in incli_array:
-            for t in range(5):
-                binned = plot_frames(filepath, inclination=inc, t=2*t, bins=bins)
+            for t in range(1):
+                binned = plot_frames(filepath, inclination=inc, t=3*t, bins=bins)
 
     ### Plot horizontal colorbar
     # Normalize bins for colormap
