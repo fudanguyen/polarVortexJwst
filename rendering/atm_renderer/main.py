@@ -696,7 +696,14 @@ class AtmosphericModel:
         
         # Handle variable flux based on mode (ensure it's a NumPy array)
         if modu_config == 'polarDynamic':
+            
+            ### for test and jwst
             phase_values = np.array([0.1, -0.2, 0.4, -0.1, 0.3, 0.2, 0.3, -0.1, -0.4, -0.3, 0.1,])
+
+            ### for test_onlyVortex
+            # phase_values = 3*np.array([0.1, -0.2, 0.4, -0.1, 0.3, 0.2, 0.3, -0.1, -0.4, -0.3, 0.1,])
+            # phase_values = 3*np.array([-0.3, -0.1, -0.4, -0.3, -0.1, 0.1, -0.2, 0.4, -0.1, 0.3, 0.2, ])
+
             variableflux = np.array(vortex_amp * np.sin(2 * np.pi / period * t + phase 
                                                         + phase_values[:self.n_vortice]))
         elif modu_config == 'polarStatic':
@@ -1783,13 +1790,17 @@ if __name__ == "__main__":
     # runName = 'test_polarMonitor_static'  # Simulation identifier
     # runName = 'test_polarMonitor_dynamic'  # Simulation identifier
 
-    runName = 'test_polar_v0_static'
+    # runName = 'test_polar_v0_static'
     # runName = 'test_polar_v0_dynamic'
+
+    # runName = 'test_onlyVortex_v0_dynamic1'
+    # runName = 'test_onlyVortex_v0_dynamic2'
+    # runName = 'test_onlyVortex_v0_static'
 
     # runName = 'polar_v1_static_baseline120'
     # runName = 'polar_v1_dynamic_baseline240'
 
-    # runName = 'jwst_v0_static'
+    runName = 'jwst_v0_static'
     # runName = 'jwst_v0_dynamic'
 
     # Set up band_config: latitudinal features
@@ -1802,15 +1813,20 @@ if __name__ == "__main__":
     [latUp, latDown, brightness, type, phase, period, variability] 
     '''
 
+    ### For test and jwst 
     bandConfig = [
         # [lat2, lat1, amplitude, type, phase, period]
         [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
-        # [25, 20, Fband, 'B', 30, Pband/2, Prot, Fband_var],
         [15, 5, Fband, 'B', 0, Pband, Prot, Fband_var], 
         [-5, -15, Fband, 'B', 0, Pband, Prot, Fband_var],
-        # [-20, -25, Fband, 'B', 30, Pband/2, Prot, Fband_var],
-        [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]
-    ]
+        [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
+
+    ### For test_onlyVortex
+    # Fpolar_var, Fband_var, Fambient_var = 0.05, 0.00, 0.00 # variab
+    # bandConfig = [
+    #     # [lat2, lat1, amplitude, type, phase, period]
+    #     [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
+    #     [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
 
     n_vortice = 5 # number of vortices
     radius_frac = 0.0075 # in unit of polar cap area
