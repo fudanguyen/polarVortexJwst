@@ -1889,7 +1889,13 @@ if __name__ == "__main__":
     results = runner.run_simulation() 
     
     # Usage example:
-    model.track_and_plot_vortex_paths(np.arange(0, 130, 10), save_path=runName+'_vortex_paths.png')
+    fig, vortexPaths = model.track_and_plot_vortex_paths(np.arange(0, 130, 10), save_path=False)
+    # # # export vortexPaths dictionary to pickle file
+    # import pickle
+    # vortex_path_file = os.path.join(runner.base_path, f'default120_vortex_paths.pkl')
+    # with open(vortex_path_file, 'wb') as f:
+    #     pickle.dump(vortexPaths, f)
+    # print(f'Vortex paths saved to {vortex_path_file}')
 
     # Save the simulation results
     runner.save_simulation(runName)
