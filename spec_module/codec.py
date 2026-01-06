@@ -1029,8 +1029,8 @@ if __name__ == "__main__":
 
     ### test onlyVortex static/dynamic
     # photrunName = 'test_onlyVortex_v0_static.h5'
-    # photrunName = 'test_onlyVortex_v0_dynamic1.h5'
-    photrunName = 'test_onlyVortex_v0_dynamic2.h5'
+    photrunName = 'test_onlyVortex_v0_dynamic1.h5'
+    # photrunName = 'test_onlyVortex_v0_dynamic2.h5'
 
     ### jwst static/dynamic
     # photrunName = 'jwst_v0_static.h5'
