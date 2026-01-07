@@ -1028,8 +1028,8 @@ if __name__ == "__main__":
     # photrunName = 'polar_v1_static_baseline120.h5'
 
     ### test onlyVortex static/dynamic
-    # photrunName = 'test_onlyVortex_v0_static.h5'
-    photrunName = 'test_onlyVortex_v0_dynamic1.h5'
+    photrunName = 'test_onlyVortex_v0_static.h5'
+    # photrunName = 'test_onlyVortex_v0_dynamic1.h5'
     # photrunName = 'test_onlyVortex_v0_dynamic2.h5'
 
     ### jwst static/dynamic
@@ -1054,9 +1054,9 @@ if __name__ == "__main__":
         os.makedirs(runpath)
     
     # ===== Generate bins and digitize =======
-    cl1, cl2 = results['40']['metadata']['colorlim']
-    Fpolar_var = results['40']['metadata']['Fpolar_var']
-    Fband_var = results['40']['metadata']['Fband_var']
+    cl1, cl2 = results['30']['metadata']['colorlim']
+    Fpolar_var = results['30']['metadata']['Fpolar_var']
+    Fband_var = results['30']['metadata']['Fband_var']
     var = max(Fpolar_var, Fband_var)
     v1, v2 = 1 - var, 1 + var
     slope = 255/(cl2 - cl1)
