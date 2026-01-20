@@ -202,7 +202,7 @@ def create_parameter_grid(
     gravity_list=[10000],
     kzz_list=[1e7],
     phase_list=[0],
-    wave_range_list=[[1.5, 5]],
+    wave_range_list=[[1, 6]],
     eq_list=[False],
     excluded_mol_list=[None],
     mmw_list=[2.2],
@@ -410,18 +410,19 @@ if __name__ == "__main__":
     #     cloudfree=False  # Set to True for cloud-free models only
     # )
     
-    ### Only iron / aluminium
-    fsed_list = [1., 1.02, 1.04, 1.06, 1.08, 1.1 , 1.12, 1.14, 1.16, 1.18]
+    ### Simple 3 clouds
+    fsed_list = sorted(set([1., 1.02, 1.04, 1.06, 1.08, 1.1, 1.12, 1.14, 1.16, 1.18] + 
+                           [1.01, 1.03, 1.05, 1.07, 1.09, 1.11, 1.13, 1.15, 1.17, 1.19]))
 
     param_grid = create_parameter_grid(
         Teff_list=[1200],
-        C_to_O_list=[0.55],
-        wave_range_list=[[1.5, 5]],
+        C_to_O_list=[0.],
+        wave_range_list=[[1, 6]],
         R_list=[700],
         gravity_list=[10000],
         fsed_list=fsed_list,
-        excluded_mol_list=[None],
-        gases_list=[['Fe', 'MgSiO3', 'Na2S']],  # Exclude all but iron
+        excluded_mol_list=['CH4'],
+        gases_list=[['Fe', 'MgSiO3', 'Na2S']],
         kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only
     )
@@ -431,7 +432,7 @@ if __name__ == "__main__":
     # Run the grid
     results, output_dir = run_parallel_grid(
         param_grid, 
-        runname='bd_grid',  # Creates directory like "bd_grid_20241016_143022"
+        runname='bd_grid_noCH4',  # Creates directory like "bd_grid_20241016_143022"
         n_processes=4  # Adjust based on your CPU
     )
     
