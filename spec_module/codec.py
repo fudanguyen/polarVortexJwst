@@ -1016,109 +1016,106 @@ def digitize_frames(results, bins):
 
 # ===== DEMO USAGE =====
 
-if __name__ == "__main__":
-    # Load your data
-    photometryh5dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
-    
-    ### test static/dynamic
-    # photrunName = 'test_polar_v0_static.h5'
-    # photrunName = 'test_polar_v0_dynamic.h5'
+class CodecRunner:
 
-    ### polar long-baseline static/dyamic
-    # photrunName = 'polar_v1_static_baseline120.h5'
+    def __init__(self, h5_file, h5_dir, spec_path):
+        self.h5_file = h5_file
+        self.h5_dir = h5_dir
+        self.spec_path = spec_path
 
-    ### test onlyVortex static/dynamic
-    photrunName = 'test_onlyVortex_v0_static.h5'
-    # photrunName = 'test_onlyVortex_v0_dynamic1.h5'
-    # photrunName = 'test_onlyVortex_v0_dynamic2.h5'
+    def encode_spectra(self, spec_config, spec_folder):
 
-    ### jwst static/dynamic
-    # photrunName = 'jwst_v0_static.h5'
-    # photrunName = 'jwst_v0_dynamic.h5'
+        h5_path = os.path.join(self.h5_dir, self.h5_file)
 
-    path = os.path.join(photometryh5dir, photrunName)
-    results = readPhotometry(path)
+        results = readPhotometry(h5_path)
 
-    specConfigName = f'1200k_clouds=20'
-    
-    runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
+        #specConfigName = f'1200k_clouds=20'
+        
+        runname = f'timeseries_{self.h5_file[:-3]}_{spec_config}'
 
-    print("\n===== CODEC PROCESSING =====")
-    print(f"Running photometry configuration: {runname}")
+        print("\n===== CODEC PROCESSING =====")
+        print(f"Running photometry configuration: {runname}")
 
-    if False:
-        runname += f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        if False:
+            runname += f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
 
-    runpath = os.path.join(os.getcwd(), runname)
-    if not os.path.exists(runpath):
-        os.makedirs(runpath)
-    
-    # ===== Generate bins and digitize =======
-    cl1, cl2 = results['30']['metadata']['colorlim']
-    Fpolar_var = results['30']['metadata']['Fpolar_var']
-    Fband_var = results['30']['metadata']['Fband_var']
-    var = max(Fpolar_var, Fband_var)
-    v1, v2 = 1 - var, 1 + var
-    slope = 255/(cl2 - cl1)
-    intercept = 0 - slope * cl1
-    a, b = slope*v1 + intercept, slope*v2 + intercept
-    n = 20
-    bins = generate_bins(a, b, nbin=n, type='linear')
-    digitize_frames(results, bins)
-    
-    # ===== STEP 1: Initialize Codec System =====
-    print("\n### STEP 1: Initialize Codec System ###")
-    codec = CodecSystem()
-    
-    ### Search for .csv files in the specified directory
-    dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
-    # specFolderName = 'bd_grid_20251108_162457_all5condensates'
-    # specFolderName = 'bd_grid_20251202_simple3clouds'
-    specFolderName = 'bd_grid_noCH4_20251209_153457'
+        #runpath = os.path.join(os.getcwd(), runname)
+        runpath = os.path.join(self.h5_dir, 'codec_analysis')
+        if not os.path.exists(runpath):
+            os.makedirs(runpath)
+        
+        # ===== Generate bins and digitize =======
+        inclin = list(results.keys())[0]
+        cl1, cl2 = results[inclin]['metadata']['colorlim']
+        Fpolar_var = results[inclin]['metadata']['Fpolar_var']
+        Fband_var = results[inclin]['metadata']['Fband_var']
+        var = max(Fpolar_var, Fband_var)
+        v1, v2 = 1 - var, 1 + var
+        slope = 255/(cl2 - cl1)
+        intercept = 0 - slope * cl1
+        a, b = slope*v1 + intercept, slope*v2 + intercept
+        n = 20
+        bins = generate_bins(a, b, nbin=n, type='linear')
+        digitize_frames(results, bins)
+        
+        # ===== STEP 1: Initialize Codec System =====
+        print("\n### STEP 1: Initialize Codec System ###")
+        codec = CodecSystem()
+        
+        ### Search for .csv files in the specified directory
+        #dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
+        # specFolderName = 'bd_grid_20251108_162457_all5condensates'
+        # specFolderName = 'bd_grid_20251202_simple3clouds'
+        #specFolderName = 'bd_grid_noCH4_20251209_153457'
 
-    specpath = os.path.join(dir, specFolderName)
-    specSummary = pickle.load(open(os.path.join(specpath, 'results_summary.pkl'), 'rb'))
+        specpath = os.path.join(self.spec_path, spec_folder)
+        specSummary = pickle.load(open(os.path.join(specpath, 'results_summary.pkl'), 'rb'))
 
-    modelID_list = [picasomodelfile['model_id'] for picasomodelfile in specSummary]
-    print(f"\nFound {len(modelID_list)} model IDs in the summary:")
-    print(modelID_list)
-    print("\nSample params file: ")
-    print(specSummary[0]['params'])
-    
-    csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
-    print(f"Found {len(csv_files)} .csv files in {specpath}")
+        modelID_list = [picasomodelfile['model_id'] for picasomodelfile in specSummary]
+        print(f"\nFound {len(modelID_list)} model IDs in the summary:")
+        print(modelID_list)
+        print("\nSample params file: ")
+        print(specSummary[0]['params'])
+        
+        csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
+        print(f"Found {len(csv_files)} .csv files in {specpath}")
 
-    # Add cloud thickness codec
-    codec.add_codec_type('cloud_thickness', max_value=n, 
-                        description='Cloud optical depth levels')
-    codec.generate_combinations() # Generate all combinations
-    
-    # ===== STEP 2: Assign Spectra (Manual) =====
-    # Use the provided csv_files for assignment
-    for i in range(n):
-        codec.assign_spectra(i, csv_files[i], validate=True)
-    print(f"Assigned {len(codec.spectra_assignments)} spectra files")
-    
-    print("\n### Loading Spectra ###")
-    codec.load_all_spectra(verbose=True) # Load all spectra into memory 
+        # Add cloud thickness codec
+        codec.add_codec_type('cloud_thickness', max_value=n, 
+                            description='Cloud optical depth levels')
+        codec.generate_combinations() # Generate all combinations
+        
+        # ===== STEP 2: Assign Spectra (Manual) =====
+        # Use the provided csv_files for assignment
+        for i in range(n):
+            codec.assign_spectra(i, csv_files[i], validate=True)
+        print(f"Assigned {len(codec.spectra_assignments)} spectra files")
+        
+        print("\n### Loading Spectra ###")
+        codec.load_all_spectra(verbose=True) # Load all spectra into memory 
 
-    print("\nCodec combinations:")
-    for i in range(n):
-        codec.print_combination(i) # Display first few combinations
+        print("\nCodec combinations:")
+        for i in range(n):
+            codec.print_combination(i) # Display first few combinations
 
-    # ===== Export/Import Configuration =====
-    configPath = os.path.join(runpath, 'codec_config.json')
-    codec.export_mapping(configPath)
-    # Test import
-    codec_loaded = CodecSystem()
-    codec_loaded.import_mapping(configPath, validate_files=False)
-    
-    #%%
-    # ===== Process Time Series for All Inclination =====
-    print("\n### Processing Time Series ###")
-    
-    for inclin in results.keys():
-    # for inclin in ['0', '40']:
+        # ===== Export/Import Configuration =====
+        configPath = os.path.join(runpath, 'codec_config.json')
+        codec.export_mapping(configPath)
+        # Test import
+        codec_loaded = CodecSystem()
+        codec_loaded.import_mapping(configPath, validate_files=False)
+
+        return {'results': results,
+                'codec': codec,
+                'runname': runname,
+                'runpath': runpath,
+                'n': n
+                }
+
+    ###############
+
+    def process_time_series(self, results, codec, runpath, n, inclin):
+
         results_ts = None
 
         # Calculate Composite Spectra for All Frames
@@ -1146,6 +1143,7 @@ if __name__ == "__main__":
         fig, axes = plt.subplots(3, 2, figsize=(10, 12))
 
         # ===== Plot 1: All individual spectra =====
+
         ax = axes[0, 0]
         for codec_id in range(n):  # Plot all codec
             wave_i, flux_i = codec.load_spectrum(codec_id)
@@ -1158,6 +1156,7 @@ if __name__ == "__main__":
         ax.grid(True, alpha=0.3)
 
         # ===== Plot 2: Light curves for specific wavelength bin =====
+        
         ax = axes[0,1]
 
         # Define wavelength bins
@@ -1284,7 +1283,7 @@ if __name__ == "__main__":
             0.4, 0.4
             ])
             im = sub_ax.imshow(img, cmap='plasma', vmin=0, vmax=n,
-                                 aspect='equal')  # Set aspect to 'equal'
+                                    aspect='equal')  # Set aspect to 'equal'
             sub_ax.set_xticks([])
             sub_ax.set_yticks([])
             sub_ax.set_title(f't={time_indices[tp]:.1f} hours', fontsize=8)
@@ -1310,4 +1309,323 @@ if __name__ == "__main__":
         print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
         print(f"Number of wavelength points: {info['n_wavelength_points']}")
 
-# %%
+    def run_codec(self, spec_config, spec_folder, inclinations=None):
+        
+        codec_info = self.encode_spectra(spec_config, spec_folder)
+
+        results = codec_info['results']
+        codec = codec_info['codec']
+        runpath = codec_info['runpath']
+        n = codec_info['n']
+
+        if inclinations != None:
+
+            if type(inclinations) != list:
+                raise TypeError("Inclination values must be passed as a list of strings.")
+            
+            for inclin in inclinations:
+                if inclin in results.keys():
+                    self.process_time_series(results, codec, runpath, n, inclin)
+                else:
+                    print(f'Inclination: {inclin} - data not found')
+
+        else:
+            for inclin in results.keys():
+                self.process_time_series(results, codec, runpath, n, inclin)
+
+
+# if __name__ == "__main__":
+#     # Load your data
+#     photometryh5dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
+    
+#     ### test static/dynamic
+#     # photrunName = 'test_polar_v0_static.h5'
+#     # photrunName = 'test_polar_v0_dynamic.h5'
+
+#     ### polar long-baseline static/dyamic
+#     # photrunName = 'polar_v1_static_baseline120.h5'
+
+#     ### test onlyVortex static/dynamic
+#     photrunName = 'test_onlyVortex_v0_static.h5'
+#     # photrunName = 'test_onlyVortex_v0_dynamic1.h5'
+#     # photrunName = 'test_onlyVortex_v0_dynamic2.h5'
+
+#     ### jwst static/dynamic
+#     # photrunName = 'jwst_v0_static.h5'
+#     # photrunName = 'jwst_v0_dynamic.h5'
+
+#     path = os.path.join(photometryh5dir, photrunName)
+#     results = readPhotometry(path)
+
+#     specConfigName = f'1200k_clouds=20'
+    
+#     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
+
+#     print("\n===== CODEC PROCESSING =====")
+#     print(f"Running photometry configuration: {runname}")
+
+#     if False:
+#         runname += f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+
+#     runpath = os.path.join(os.getcwd(), runname)
+#     if not os.path.exists(runpath):
+#         os.makedirs(runpath)
+    
+#     # ===== Generate bins and digitize =======
+#     cl1, cl2 = results['30']['metadata']['colorlim']
+#     Fpolar_var = results['30']['metadata']['Fpolar_var']
+#     Fband_var = results['30']['metadata']['Fband_var']
+#     var = max(Fpolar_var, Fband_var)
+#     v1, v2 = 1 - var, 1 + var
+#     slope = 255/(cl2 - cl1)
+#     intercept = 0 - slope * cl1
+#     a, b = slope*v1 + intercept, slope*v2 + intercept
+#     n = 20
+#     bins = generate_bins(a, b, nbin=n, type='linear')
+#     digitize_frames(results, bins)
+    
+#     # ===== STEP 1: Initialize Codec System =====
+#     print("\n### STEP 1: Initialize Codec System ###")
+#     codec = CodecSystem()
+    
+#     ### Search for .csv files in the specified directory
+#     dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
+#     # specFolderName = 'bd_grid_20251108_162457_all5condensates'
+#     # specFolderName = 'bd_grid_20251202_simple3clouds'
+#     specFolderName = 'bd_grid_noCH4_20251209_153457'
+
+#     specpath = os.path.join(dir, specFolderName)
+#     specSummary = pickle.load(open(os.path.join(specpath, 'results_summary.pkl'), 'rb'))
+
+#     modelID_list = [picasomodelfile['model_id'] for picasomodelfile in specSummary]
+#     print(f"\nFound {len(modelID_list)} model IDs in the summary:")
+#     print(modelID_list)
+#     print("\nSample params file: ")
+#     print(specSummary[0]['params'])
+    
+#     csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
+#     print(f"Found {len(csv_files)} .csv files in {specpath}")
+
+#     # Add cloud thickness codec
+#     codec.add_codec_type('cloud_thickness', max_value=n, 
+#                         description='Cloud optical depth levels')
+#     codec.generate_combinations() # Generate all combinations
+    
+#     # ===== STEP 2: Assign Spectra (Manual) =====
+#     # Use the provided csv_files for assignment
+#     for i in range(n):
+#         codec.assign_spectra(i, csv_files[i], validate=True)
+#     print(f"Assigned {len(codec.spectra_assignments)} spectra files")
+    
+#     print("\n### Loading Spectra ###")
+#     codec.load_all_spectra(verbose=True) # Load all spectra into memory 
+
+#     print("\nCodec combinations:")
+#     for i in range(n):
+#         codec.print_combination(i) # Display first few combinations
+
+#     # ===== Export/Import Configuration =====
+#     configPath = os.path.join(runpath, 'codec_config.json')
+#     codec.export_mapping(configPath)
+#     # Test import
+#     codec_loaded = CodecSystem()
+#     codec_loaded.import_mapping(configPath, validate_files=False)
+    
+#     #%%
+#     # ===== Process Time Series for All Inclination =====
+#     print("\n### Processing Time Series ###")
+    
+#     for inclin in results.keys():
+#     # for inclin in ['0', '40']:
+#         results_ts = None
+
+#         # Calculate Composite Spectra for All Frames
+#         results_ts = codec.process_time_series(
+#             time_variant_codecs={
+#                 'cloud_thickness': results[inclin]['digitized']
+#             },
+#             frames=range(0, len(results[inclin]['digitized'])),
+#             verbose=False)
+#         # Save the codecs images time series
+#         codecPath = os.path.join(runpath, f'codec_images_i={inclin}.h5')
+#         codec.save_codec_images_h5(results_ts, codecPath)
+
+#         # Calculating Composite Spectra Time Series
+#         composite_spectra_ts = codec.calculate_composite_spectra_timeseries(
+#             results_ts, verbose=False)
+
+#         spectsPath = os.path.join(runpath, f'composite_spectra_i={inclin}.h5')
+#         # Save the spectra timeseries
+#         codec.save_composite_spectra_timeseries(composite_spectra_ts, spectsPath)
+        
+#         # ===== Visualization: Compare Individual vs Composite =====
+#         print("\n### Visualizing Spectra ###")
+
+#         fig, axes = plt.subplots(3, 2, figsize=(10, 12))
+
+#         # ===== Plot 1: All individual spectra =====
+#         ax = axes[0, 0]
+#         for codec_id in range(n):  # Plot all codec
+#             wave_i, flux_i = codec.load_spectrum(codec_id)
+#             ax.plot(wave_i, flux_i, alpha=1, lw=0.5, label=f'Codec {codec_id}')
+#         ax.set_xlabel('Wavelength (μm)')
+#         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+#         ax.set_title('Individual Spectra')
+#         ax.legend(fontsize=5)
+#         ax.set_yscale('linear')
+#         ax.grid(True, alpha=0.3)
+
+#         # ===== Plot 2: Light curves for specific wavelength bin =====
+#         ax = axes[0,1]
+
+#         # Define wavelength bins
+#         wavebin = [(2.8, 2.9, 'red'),
+#                 (2.4, 2.5, 'blue'),]
+
+#         # Extract light curves for each bin
+#         for wmin, wmax, color in wavebin:
+#             flux_timeseries = []
+#             time_indices = results[inclin]['time_array']
+            
+#             for frame_i, wave_i, flux_i in composite_spectra_ts:
+#                 # Find wavelength indices in the bin
+#                 mask = (wave_i >= wmin) & (wave_i <= wmax)
+#                 if np.sum(mask) > 0:
+#                     # Calculate median flux in this bin
+#                     median_flux = np.median(flux_i[mask])
+#                     flux_timeseries.append(median_flux)
+            
+#             # Plot light curve
+#             ax.plot(time_indices, flux_timeseries, 
+#                     marker='o', linestyle='-', color=color,
+#                     alpha=0.7, 
+#                     linewidth=1, markersize=2,
+#                     label=f'{wmin}-{wmax} μm')
+
+#             # Highlight specific timepoint
+#             for i,xid in enumerate([26, 58, 90]):
+#                 color_list = ['orange', 'green', 'purple']
+#                 ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
+#                         marker='*', markersize=10, color=color_list[i],)
+
+#         ax.set_xlabel('Frame Index')
+#         ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
+
+#         ax.set_title(f'Light Curves for Selected Wavelength Bins; i={inclin}')
+#         ax.legend(fontsize=8)
+#         ax.grid(True, alpha=0.3)
+#         ax.set_yscale('linear')
+
+#         # ===== Plot 3: Fractional contributions =====
+
+#         # Process a Single Frame for Reference
+#         print(f"\n### Processing Single Frame; i={inclin} ###")
+#         frame_idx = 0
+#         composite = codec.create_composite_image(
+#             cloud_thickness=results[inclin]['digitized'][frame_idx]
+#         )
+#         fractions = codec.calculate_spectral_fractions(composite, detailed=True)
+#         # wave, flux = codec.calculate_composite_spectrum(fractions)
+
+#         ax = axes[1, 0]
+#         codec_ids = list(fractions['fractions'].keys())
+#         frac_values = list(fractions['fractions'].values())
+#         ax.bar(codec_ids, frac_values)
+#         ax.set_xlabel('Codec ID')
+#         ax.set_xticks(codec_ids[::2])  # Show every other tick
+#         ax.set_ylabel('Fractional Area')
+#         ax.set_title(f'Fractional Contributions (Frame {frame_idx}); i={inclin}')
+#         ax.grid(True, alpha=0.3, axis='y')
+
+#         # ### ===== Add inset atm images to axes[1, 1] ======
+#         # inset_ax = ax.inset_axes([0.05, 0.3, 0.17*1.95, 0.25*2])  # [x, y, width, height]
+#         # inset_ax.imshow(results_ts[15]['composite'], cmap='plasma', aspect='auto')
+#         # inset_ax.set_xticks([])
+#         # inset_ax.set_yticks([])
+#         # inset_ax.set_title('Clouds-codec', fontsize=8)
+
+#         # ===== Plot 4: Composite spectra evolution over time =====
+#         ax = axes[1, 1]
+#         # for i in range(0, len(composite_spectra_ts), 10):  # Every 10th frame
+#         #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
+#         #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
+        
+#         frameA, waveA, fluxA = composite_spectra_ts[26]
+#         frameB, waveB, fluxB = composite_spectra_ts[58]
+#         frameC, waveC, fluxC = composite_spectra_ts[90]
+
+#         ax.plot(waveA, fluxA/fluxB, lw=1, label=f'max / mid')
+#         ax.plot(waveA, fluxA/fluxC, lw=1, label=f'max / min')
+#         ax.plot(waveA, fluxB/fluxC, lw=1, label=f'mid / min')
+
+#         ax.set_xlabel('Wavelength (μm)')
+#         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+#         ax.set_title(f'Composite Spectra Ratio; i={inclin}')
+#         ax.legend(fontsize=8)
+#         ax.grid(True, alpha=0.3)
+#         # ax.set_ylim(1.0, 1.10)
+
+#         # ===== Plot 5: Periodogram of second lightcurve in hours x-axis =====
+#         ax = axes[2, 0]
+
+#         from PyAstronomy.pyTiming import pyPeriod
+#         freqs = np.linspace(0.01, 1, 1000) 
+#         flux_timeseries = np.array(flux_timeseries)
+#         lombscargle = pyPeriod.Gls(# (time, flux, flux_err)
+#             (time_indices, flux_timeseries, 0.001*flux_timeseries), freq=freqs)
+
+#         period = 1/lombscargle.freq
+#         power = lombscargle.power
+
+#         fap = 0.1 # false alarm probability
+#         fapLevel = lombscargle.powerLevel(fap)
+
+#         # Plot the periodogram
+#         ax.plot(period, power, color='purple')
+#         ax.axhline(fapLevel, color='red', ls='--', 
+#                     lw=0.5, label=f'FAP={fap}')
+#         ax.set_xlabel('Period (hour)')
+#         ax.set_ylabel('Power')
+#         ax.set_title('Periodogram of Flux Timeseries')
+#         ax.legend()
+#         ax.grid(True, alpha=0.3)
+
+#         # ===== Plot 6: 2x2 images at t=0, 10, 20, 30
+#         ax = axes[2, 1]
+#         timepoints = [3, 11, 32, 67]
+#         n_tp = len(timepoints)
+#         for i, tp in enumerate(timepoints):
+#             img = results_ts[tp]['composite']
+#             sub_ax = ax.inset_axes([
+#             0.05 + (i % 2) * 0.47, 
+#             0.55 - (i // 2) * 0.47, 
+#             0.4, 0.4
+#             ])
+#             im = sub_ax.imshow(img, cmap='plasma', vmin=0, vmax=n,
+#                                  aspect='equal')  # Set aspect to 'equal'
+#             sub_ax.set_xticks([])
+#             sub_ax.set_yticks([])
+#             sub_ax.set_title(f't={time_indices[tp]:.1f} hours', fontsize=8)
+#         ax.set_xticks([])
+#         ax.set_yticks([])
+#         # set all spine frames to be invisible
+#         for spine in ax.spines.values():
+#             spine.set_visible(False)
+
+#         # ==============================
+#         plt.tight_layout()
+#         handle = f'codecSummary_i={inclin}.pdf'
+#         outpath = os.path.join(runpath, handle)
+#         plt.savefig(outpath, dpi=150, bbox_inches='tight')
+#         print("\nSaved visualization to ", handle)
+#         plt.show()
+#         plt.close()
+
+#         # ===== Summary Statistics =====
+#         print("\n### Spectra Information ###")
+#         info = codec.get_spectra_info()
+#         print(f"Loaded {info['n_spectra']} spectra")
+#         print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
+#         print(f"Number of wavelength points: {info['n_wavelength_points']}")
+
+# # %%
