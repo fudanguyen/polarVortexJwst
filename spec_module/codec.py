@@ -291,19 +291,28 @@ class CodecSystem:
         
         return composite
     
-    def calculate_spectral_fractions(self, composite_image, detailed=False):
+    def calculate_spectral_fractions(self, composite_image, detailed=False, 
+                            limb_darkening=True, ld_law='cubic'):
         """
         Calculate the fractional area contribution of each codec ID.
         
         Parameters:
             composite_image (2D array): Array of codec IDs (with NaN for background)
             detailed (bool): If True, return additional metadata
+            limb_darkening (bool): If True, apply limb-darkening weights to fractions
+            ld_law (str): Limb-darkening law to use
+                - 'sqrt': μ = sqrt(1 - r²/R²)  [linear, least aggressive]
+                - 'quadratic': μ = (1 - r²/R²)  [more aggressive]
+                - 'cubic': μ = (1 - r²/R²)^(3/2)  [very aggressive]
+                - 'cosine': μ = cos(πr/2R)  [smooth falloff]
+                - 'exponential': μ = exp(-3r²/R²)  [gaussian-like]
         
         Returns:
             dict: {codec_id: fraction, ...} or detailed dict if detailed=True
         """
         # Flatten and remove NaN (background)
-        valid_pixels = composite_image[~np.isnan(composite_image)]
+        valid_mask = ~np.isnan(composite_image)
+        valid_pixels = composite_image[valid_mask]
         
         if len(valid_pixels) == 0:
             print("WARNING: No valid pixels found (all background)")
@@ -315,24 +324,81 @@ class CodecSystem:
                 'coverage': 0.0
             }
         
-        # Count occurrences of each codec ID
-        unique_ids, counts = np.unique(valid_pixels, return_counts=True)
+        # Calculate weights (limb-darkening or uniform)
+        if limb_darkening:
+            # Get image dimensions and calculate center
+            ny, nx = composite_image.shape
+            center_y, center_x = ny / 2, nx / 2
+            
+            # Create coordinate grids
+            y_coords, x_coords = np.ogrid[:ny, :nx]
+            
+            # Calculate distance from center for all pixels
+            distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+            
+            # Estimate radius from the valid pixels (maximum distance)
+            R = np.nanmax(distances[valid_mask])
+            
+            # Calculate normalized radius
+            r_normalized = distances / R
+            
+            # Apply chosen limb-darkening law
+            if ld_law == 'sqrt':
+                # Linear limb-darkening: μ = sqrt(1 - r²/R²)
+                mu = np.sqrt(np.maximum(0, 1 - r_normalized**2))
+            
+            elif ld_law == 'quadratic':
+                # Quadratic: μ = 1 - r²/R²
+                mu = np.maximum(0, 1 - r_normalized**2)
+            
+            elif ld_law == 'cubic':
+                # Cubic: μ = (1 - r²/R²)^(3/2)
+                mu = np.maximum(0, 1 - r_normalized**2)**(3/2)
+            
+            elif ld_law == 'cosine':
+                # Cosine falloff: μ = cos(πr/2R)
+                mu = np.cos(np.pi * r_normalized / 2)
+                mu = np.maximum(0, mu)  # Clip negative values
+            
+            elif ld_law == 'exponential':
+                # Exponential/Gaussian-like: μ = exp(-3r²/R²)
+                mu = np.exp(-3 * r_normalized**2)
+            
+            else:
+                raise ValueError(f"Unknown limb-darkening law: {ld_law}")
+            
+            # Extract weights for valid pixels only
+            weights = mu[valid_mask]
+        else:
+            # Uniform weighting
+            weights = np.ones_like(valid_pixels)
         
-        # Total non-background pixels
-        total_pixels = len(valid_pixels)
+        # Get unique codec IDs
+        unique_ids = np.unique(valid_pixels[~np.isnan(valid_pixels)])
         
-        # Calculate fractions
+        # Calculate weighted sums for each codec ID
         fractions = {}
-        for codec_id, count in zip(unique_ids, counts):
-            fractions[int(codec_id)] = count / total_pixels
+        counts_dict = {}
+        total_weight = np.sum(weights)
+        
+        for codec_id in unique_ids:
+            mask = (valid_pixels == codec_id)
+            pixel_count = np.sum(mask)
+            weighted_sum = np.sum(weights[mask])
+            
+            fractions[int(codec_id)] = weighted_sum / total_weight
+            counts_dict[int(codec_id)] = int(pixel_count)
         
         if detailed:
             return {
                 'fractions': fractions,
-                'counts': dict(zip(unique_ids.astype(int), counts)),
-                'total_pixels': int(total_pixels),
+                'counts': counts_dict,
+                'total_pixels': int(len(valid_pixels)),
                 'background_pixels': int(np.sum(np.isnan(composite_image))),
-                'coverage': float(total_pixels / composite_image.size)
+                'coverage': float(len(valid_pixels) / composite_image.size),
+                'limb_darkening_applied': limb_darkening,
+                'ld_law': ld_law if limb_darkening else None,
+                'total_weight': float(total_weight) if limb_darkening else None
             }
         else:
             return fractions
@@ -417,7 +483,7 @@ class CodecSystem:
             else:
                 print(f"  Spectra: [not assigned]")
     
-    def print_all_combinations(self, max_display=20):
+    def print_all_combinations(self, max_display=50):
         """
         Print all codec combinations (limited display).
         
@@ -1011,6 +1077,8 @@ def digitize_frames(results, bins):
     """Digitize all frames in gray_array for each inclination."""
     for inclin in results.keys():
         gray_array = results[inclin]['gray_array']
+        # select the gray_array at 90% circular radii
+         
         digitized = np.digitize(gray_array, bins, right=True)
         results[inclin]['digitized'] = digitized
 
@@ -1024,11 +1092,17 @@ if __name__ == "__main__":
     # photrunName = 'test_polar_v0_static.h5'
     # photrunName = 'test_polar_v0_dynamic.h5'
 
+    # photrunName = 'test_polar_v1_static.h5'
+    # photrunName = 'test_polar_v1_dynamic.h5'
+
+    photrunName = 'test_polar_v2_static.h5'
+    # photrunName = 'test_polar_v2_dynamic.h5'
+
     ### polar long-baseline static/dyamic
     # photrunName = 'polar_v1_static_baseline120.h5'
 
     ### test onlyVortex static/dynamic
-    photrunName = 'test_onlyVortex_v0_static.h5'
+    # photrunName = 'test_onlyVortex_v0_static.h5'
     # photrunName = 'test_onlyVortex_v0_dynamic1.h5'
     # photrunName = 'test_onlyVortex_v0_dynamic2.h5'
 
@@ -1039,7 +1113,22 @@ if __name__ == "__main__":
     path = os.path.join(photometryh5dir, photrunName)
     results = readPhotometry(path)
 
-    specConfigName = f'1200k_clouds=20'
+    ### Simple fsed, n=20
+    # specConfigName = f'1200k_clouds=20'
+    # ### specFolderName = 'bd_grid_20251108_162457_all5condensates'
+    # ### specFolderName = 'bd_grid_20251202_simple3clouds'
+    # specFolderName = 'bd_grid_noCH4_20251209_153457'
+    # n = 20
+    
+    ### Simple fsed, n=50
+    # specConfigName = f'1200K_clouds=50'
+    # specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
+    # n = 50
+
+    ### Comlex fsed per species, n=20
+    specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4'
+    specFolderName = 'bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742'
+    n = 20
     
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 
@@ -1057,12 +1146,12 @@ if __name__ == "__main__":
     cl1, cl2 = results['30']['metadata']['colorlim']
     Fpolar_var = results['30']['metadata']['Fpolar_var']
     Fband_var = results['30']['metadata']['Fband_var']
-    var = max(Fpolar_var, Fband_var)
+    Fvortex_var = 0.15 # Fixed vortex variation for all runs
+    var = max(Fpolar_var, Fband_var, Fvortex_var)
     v1, v2 = 1 - var, 1 + var
     slope = 255/(cl2 - cl1)
     intercept = 0 - slope * cl1
     a, b = slope*v1 + intercept, slope*v2 + intercept
-    n = 20
     bins = generate_bins(a, b, nbin=n, type='linear')
     digitize_frames(results, bins)
     
@@ -1072,9 +1161,6 @@ if __name__ == "__main__":
     
     ### Search for .csv files in the specified directory
     dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
-    # specFolderName = 'bd_grid_20251108_162457_all5condensates'
-    # specFolderName = 'bd_grid_20251202_simple3clouds'
-    specFolderName = 'bd_grid_noCH4_20251209_153457'
 
     specpath = os.path.join(dir, specFolderName)
     specSummary = pickle.load(open(os.path.join(specpath, 'results_summary.pkl'), 'rb'))
@@ -1085,7 +1171,7 @@ if __name__ == "__main__":
     print("\nSample params file: ")
     print(specSummary[0]['params'])
     
-    csv_files = sorted(glob.glob(f"{specpath}/*.csv"))
+    csv_files = sorted([os.path.join(specpath, f) for f in os.listdir(specpath) if f.endswith('.csv')])
     print(f"Found {len(csv_files)} .csv files in {specpath}")
 
     # Add cloud thickness codec
@@ -1152,8 +1238,8 @@ if __name__ == "__main__":
             ax.plot(wave_i, flux_i, alpha=1, lw=0.5, label=f'Codec {codec_id}')
         ax.set_xlabel('Wavelength (μm)')
         ax.set_ylabel('Flux (erg/cm²/s/Hz)')
-        ax.set_title('Individual Spectra')
-        ax.legend(fontsize=5)
+        ax.set_title(f'Individual Spectra: {n} fseds')
+        # ax.legend(fontsize=5)
         ax.set_yscale('linear')
         ax.grid(True, alpha=0.3)
 
@@ -1161,8 +1247,8 @@ if __name__ == "__main__":
         ax = axes[0,1]
 
         # Define wavelength bins
-        wavebin = [(2.8, 2.9, 'red'),
-                (2.4, 2.5, 'blue'),]
+        wavebin = [(1.3, 1.4, 'red'),]
+                # (2.4, 2.5, 'blue'),]
 
         # Extract light curves for each bin
         for wmin, wmax, color in wavebin:
@@ -1184,8 +1270,12 @@ if __name__ == "__main__":
                     linewidth=1, markersize=2,
                     label=f'{wmin}-{wmax} μm')
 
+            tmax = np.argmax([np.mean(flux_i) for _, _, flux_i in composite_spectra_ts])
+            tmin = np.argmin([np.mean(flux_i) for _, _, flux_i in composite_spectra_ts])
+            tmid = len(composite_spectra_ts) // 2
+
             # Highlight specific timepoint
-            for i,xid in enumerate([26, 58, 90]):
+            for i,xid in enumerate([tmax, tmid, tmin]):
                 color_list = ['orange', 'green', 'purple']
                 ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
                         marker='*', markersize=10, color=color_list[i],)
@@ -1231,10 +1321,10 @@ if __name__ == "__main__":
         # for i in range(0, len(composite_spectra_ts), 10):  # Every 10th frame
         #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
         #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
-        
-        frameA, waveA, fluxA = composite_spectra_ts[26]
-        frameB, waveB, fluxB = composite_spectra_ts[58]
-        frameC, waveC, fluxC = composite_spectra_ts[90]
+
+        frameA, waveA, fluxA = composite_spectra_ts[tmax]
+        frameB, waveB, fluxB = composite_spectra_ts[tmid]
+        frameC, waveC, fluxC = composite_spectra_ts[tmin]
 
         ax.plot(waveA, fluxA/fluxB, lw=1, label=f'max / mid')
         ax.plot(waveA, fluxA/fluxC, lw=1, label=f'max / min')

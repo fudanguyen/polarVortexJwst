@@ -1793,9 +1793,15 @@ if __name__ == "__main__":
     # runName = 'test_polar_v0_static'
     # runName = 'test_polar_v0_dynamic'
 
+    # runName = 'test_polar_v1_static'
+    runName = 'test_polar_v1_dynamic'
+
+    # runName = 'test_polar_v2_static'
+    # runName = 'test_polar_v2_dynamic'
+
     # runName = 'test_onlyVortex_v0_dynamic1'
     # runName = 'test_onlyVortex_v0_dynamic2'
-    runName = 'test_onlyVortex_v0_static'
+    # runName = 'test_onlyVortex_v0_static'
 
     # runName = 'polar_v1_static_baseline120'
     # runName = 'polar_v1_dynamic_baseline240'
@@ -1824,10 +1830,36 @@ if __name__ == "__main__":
     ### For test_onlyVortex
     if 'test_onlyVortex' in runName:
         Fpolar_var, Fband_var, Fambient_var = 0.00, 0.00, 0.00 # variab
+        Fpolar, Fband, Fambient = 1, 1, 1 # amp
         bandConfig = [
             # [lat2, lat1, amplitude, type, phase, period]
             [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
             [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
+
+    if 'test_polar_v1' in runName:
+        Fpolar, Fband, Fambient = 1, 1, 1 # amp
+        Fpolar_var, Fband_var, Fambient_var = 0.02, 0.15, 0.00 # variab
+        bandConfig = [
+            # [lat2, lat1, amplitude, type, phase, period]
+            [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
+            [17, 10, Fband, 'B', 0, Pband/2, Prot, Fband_var],
+            [8, 2, Fband, 'B', 10, Pband, Prot, Fband_var], 
+            [-2, -8, Fband, 'B', 10, Pband, Prot, Fband_var],
+            [-10, -17, Fband, 'B', 0, Pband/2, Prot, Fband_var],
+            [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
+
+    if 'test_polar_v2' in runName:
+        Fpolar, Fband, Fambient = 1, 1, 1 # amp
+        Fpolar_var, Fband_var, Fambient_var = 0.02, 0.15, 0.00 # variab
+        bandConfig = [
+            # [lat2, lat1, amplitude, type, phase, period]
+            [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
+            [28, 21, Fband, 'B', 0, Pband/2, Prot, Fband_var],
+            [12, 5, Fband, 'B', 10, Pband, Prot, Fband_var], 
+            [-5, -12, Fband, 'B', 10, Pband, Prot, Fband_var],
+            [-21, -28, Fband, 'B', 0, Pband/2, Prot, Fband_var],
+            [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
+
 
     n_vortice = 5 # number of vortices
     radius_frac = 0.0075 # in unit of polar cap area
@@ -1849,7 +1881,7 @@ if __name__ == "__main__":
         # Set up time_config: JWST-like observation
         timeConfigVar = TimeConfig(t0=0, t1=180, frames=360, option='jwst', jwst_setup={'gap':60, 'segments':3})
     elif 'test' in runName:
-        timeConfigVar = TimeConfig(t0=0, t1=60, frames=120, option='full')
+        timeConfigVar = TimeConfig(t0=0, t1=60, frames=240, option='full')
     else:
         timeConfigVar = TimeConfig(t0=0, t1=60, frames=120, option='full')
 
@@ -1880,6 +1912,7 @@ if __name__ == "__main__":
     model = AtmosphericModel(mesh, atmo_config, vortexConfig)
 
     # incli_array = [40] # List of inclinations to simulate
+    # incli_array = [0, 50, 90]
     incli_array = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
     if 'test_onlyVortex' in runName: incli_array = [0, 30, 60, 90]
     # incli_array = [0]
@@ -1933,10 +1966,10 @@ if __name__ == "__main__":
             spec = f[f'{inclination}/specmask']
             fig, axes = plt.subplots(1,3, figsize=(15,5))
             # Original data
-            axes[0].imshow(limb_mask*data, vmin=0, vmax=150, cmap='inferno')
+            axes[0].imshow(limb_mask*data, vmin=0, vmax=155, cmap='inferno')
             # Binned image
             binned = np.digitize(np.array(data), bins, right=True)
-            axes[1].imshow(binned, cmap='viridis')
+            axes[1].imshow(binned, vmin=0, vmax=20, cmap='viridis')
             # Specmask
             axes[2].imshow(spec, cmap='viridis')
             plt.tight_layout()
@@ -1955,7 +1988,7 @@ if __name__ == "__main__":
     if True:
         filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output', runName+'.h5')
         for inc in incli_array:
-            for t in range(1):
+            for t in range(2):
                 binned = plot_frames(filepath, inclination=inc, t=3*t, bins=bins)
 
     ### Plot horizontal colorbar

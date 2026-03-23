@@ -94,6 +94,12 @@ def configure_cloud(df, profile, opacity, mh=1, mmw=2.2, fsed=1, R=300,
     
     return df_out['regridx'], df_out['regridy'], cld_out, df_out
 
+def _fsed_to_str(fsed):
+    """Return a filename-safe string for either a float or per-species dict fsed."""
+    if isinstance(fsed, dict):
+        # e.g. {'Fe': 14, 'MgSiO3': 3.1, 'Na2S': 4.6}  →  'Fe14.00-MgSiO33.10-Na2S4.60'
+        return '-'.join(f"{sp}{v:.4f}" for sp, v in fsed.items())
+    return f"{fsed:.4f}"
 
 def run_single_model(params):
     """
@@ -134,7 +140,7 @@ def run_single_model(params):
             # Create descriptive filename for cloud-free model
             # Format: bd_[Teff]_[gravity]_[kzz]_cloudfree.nc
             filename = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_cloudfree.nc"
-            specname = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_cloudfree.csv"
+            specname = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.3E}_cloudfree.csv"
             wave, thermal = clf['regridx'], clf['regridy']
 
             # Add to result AFTER creating the file
@@ -159,9 +165,10 @@ def run_single_model(params):
             
             # Create descriptive filename for cloudy model
             # Format: bd_[Teff]_[gravity]_[kzz]_[fsed]_cloudy.nc
-            filename = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_{cloud_params['fsed']:.2f}_cloudy.nc"
-            specname = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_{cloud_params['fsed']:.2f}_cloudy.csv"
-            virganame = f"virga_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_{cloud_params['fsed']:.2f}_cloudy.pkl"
+            _fsed_str = _fsed_to_str(cloud_params['fsed'])
+            filename  = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.4E}_{_fsed_str}_cloudy.nc"
+            specname  = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.4E}_{_fsed_str}_cloudy.csv"
+            virganame = f"virga_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.4E}_{_fsed_str}_cloudy.pkl"
             wave, thermal = x_cldy, y_cldy
 
             # Add to result AFTER creating the file
@@ -193,7 +200,145 @@ def run_single_model(params):
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
         print(f"Error in model {params.get('model_id', 'unknown')}: {error_msg}")
         return {'model_id': params.get('model_id'), 'error': error_msg, 'params': params}
-    
+
+# ===========================================================================
+def generate_fsed(
+    mode='simple',
+    # --- Simple mode ---
+    start=1.0,
+    stop=1.20,
+    total=20,
+    # --- Complex mode ---
+    species_params=None,
+    n_steps=5,
+    gases=None,
+):
+    """
+    Generate fsed parameter lists for PICASO/VIRGA models.
+
+    Parameters
+    ----------
+    mode : str
+        'simple'  – one shared fsed value per model (returns list of floats)
+        'complex' – per-species fsed values per model (returns list of dicts)
+
+    Simple mode
+    -----------
+    start : float   Starting fsed value (inclusive)
+    stop  : float   Ending fsed value   (exclusive)
+    total : int     Number of evenly-spaced values to generate
+                    Step is computed as (stop - start) / total,
+                    decimal precision is inferred from the step magnitude.
+    Example
+    -------
+    generate_fsed('simple', start=1.0, stop=1.20, total=20)
+    → [1.0, 1.01, 1.02, ..., 1.19]   # step = 0.01, 20 values
+
+    Complex mode
+    ------------
+    species_params : dict
+        Maps each gas species to either:
+          - a single float  → held constant across all steps
+          - a dict {'start': x, 'stop': y} → linearly varied over n_steps
+            direction is automatic (start > stop → decreasing)
+    n_steps : int
+        Number of fsed combinations to generate.
+    gases : list, optional
+        The gases list from create_parameter_grid() – used for validation.
+        Raises ValueError if there is a mismatch between the species in
+        species_params and the gases list.
+
+    Example
+    -------
+    generate_fsed(
+        mode='complex',
+        species_params={
+            'Fe':     14,                            # constant
+            'MgSiO3': {'start': 3.1, 'stop': 3.9},  # increasing
+            'Na2S':   {'start': 4.6, 'stop': 2.8},  # decreasing
+        },
+        n_steps=5,
+        gases=['Fe', 'MgSiO3', 'Na2S'],
+    )
+    → [
+        {'Fe': 14, 'MgSiO3': 3.1, 'Na2S': 4.6},
+        {'Fe': 14, 'MgSiO3': 3.3, 'Na2S': 4.15},
+        {'Fe': 14, 'MgSiO3': 3.5, 'Na2S': 3.7},
+        {'Fe': 14, 'MgSiO3': 3.7, 'Na2S': 3.25},
+        {'Fe': 14, 'MgSiO3': 3.9, 'Na2S': 2.8},
+      ]
+
+    Returns
+    -------
+    list
+        Simple  → list of floats
+        Complex → list of dicts  {species: fsed_value}
+    """
+    if mode == 'simple':
+        if total <= 0:
+            raise ValueError(f"total must be > 0, got {total}")
+
+        step = (stop - start) / total
+
+        # Infer rounding precision from the step magnitude so the output
+        # stays clean (e.g. step=0.01 → 2 decimal places).
+        if step != 0:
+            import math
+            magnitude = math.floor(math.log10(abs(step)))
+            decimals = max(0, -magnitude + 3)   # 1 extra digit for safety
+        else:
+            decimals = 10
+
+        fsed_list = [round(start + i * step, decimals) for i in range(total)]
+        return fsed_list
+
+    elif mode == 'complex':
+        if species_params is None:
+            raise ValueError("species_params must be provided for complex mode.")
+        if n_steps <= 0:
+            raise ValueError(f"n_steps must be > 0, got {n_steps}")
+
+        # ── Validate against gases list ───────────────────────────────────
+        if gases is not None:
+            param_species = set(species_params.keys())
+            grid_species  = set(gases)
+            missing = param_species - grid_species
+            extra   = grid_species  - param_species
+            errors  = []
+            if missing:
+                errors.append(f"  species in species_params but NOT in gases: {sorted(missing)}")
+            if extra:
+                errors.append(f"  species in gases but NOT in species_params: {sorted(extra)}")
+            if errors:
+                raise ValueError("Gas species mismatch:\n" + "\n".join(errors))
+
+        # ── Build per-species value arrays ────────────────────────────────
+        species_arrays = {}
+        for species, cfg in species_params.items():
+            if isinstance(cfg, (int, float)):
+                # Constant: repeat the value
+                species_arrays[species] = [float(cfg)] * n_steps
+            elif isinstance(cfg, dict):
+                s, e = cfg['start'], cfg['stop']
+                # np.linspace handles both increasing and decreasing automatically
+                vals = list(np.linspace(s, e, n_steps))
+                species_arrays[species] = vals
+            else:
+                raise ValueError(
+                    f"Invalid config for '{species}': expected float or "
+                    f"{{'start': x, 'stop': y}}, got {type(cfg)}"
+                )
+
+        # ── Zip into list of dicts ────────────────────────────────────────
+        fsed_list = [
+            {sp: species_arrays[sp][i] for sp in species_params}
+            for i in range(n_steps)
+        ]
+        return fsed_list
+
+    else:
+        raise ValueError(f"mode must be 'simple' or 'complex', got '{mode!r}'")
+
 # ===========================================================================
 def create_parameter_grid(
     Teff_list=[1200],
@@ -340,7 +485,13 @@ def write_config_file(filename, results):
             f.write(f"    excluded_mol: {params['excluded_mol']}\n")
             
             f.write(f"  Clouds:\n")
-            f.write(f"    fsed       : {params['fsed']}\n")
+            fsed = params['fsed']
+            if isinstance(fsed, dict):
+                f.write(f"    fsed       :\n")
+                for sp, val in fsed.items():
+                    f.write(f"      {sp:<12}: {val}\n")
+            else:
+                f.write(f"    fsed       : {fsed}\n")
             f.write(f"    mmw        : {params['mmw']}\n")
             f.write(f"    gases      : {params['gases']}\n")
             f.write(f"    R          : {params['R']}\n")
@@ -411,8 +562,40 @@ if __name__ == "__main__":
     # )
     
     ### Simple 3 clouds
-    fsed_list = sorted(set([1., 1.02, 1.04, 1.06, 1.08, 1.1, 1.12, 1.14, 1.16, 1.18] + 
-                           [1.01, 1.03, 1.05, 1.07, 1.09, 1.11, 1.13, 1.15, 1.17, 1.19]))
+    runnerName = 'bd_grid_noCH4_n=50'
+    mode = 'simple'
+    # mode = 'complex'
+    gases = ['Fe', 'MgSiO3', 'Na2S']
+    fsed_list = [] # Will be generated by generate_fsed() based on the mode and parameters below
+    # n_levels = 20
+    n_levels = 50
+
+    if mode == 'simple':
+        # ── Option A: simple (replaces the manual sorted(set(...)) block) ──────────
+        fsed_list = generate_fsed(
+            mode='simple',
+            start=1.0,
+            stop=1.20,  # exclusive – last value will be 1.19
+            total=n_levels,   # number of values to generate)
+        )
+        # → [1.0, 1.01, 1.02, ..., 1.19]
+
+    elif mode == 'complex':
+        # ── Option B: complex (per-species, mixed direction) ───────────────────────
+        iterationName = "complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]"
+        runnerName = f"{runnerName}_{iterationName}"
+
+        fsed_list = generate_fsed(
+            mode='complex',
+            species_params={
+                'Fe':     14,                            # constant
+                'MgSiO3': {'start': 3.1, 'stop': 3.9},  # increasing
+                'Na2S':   {'start': 4.6, 'stop': 2.8},  # decreasing
+            },
+            n_steps=n_levels,
+            gases=gases,   # enables mismatch validation
+        )
+        # → [{'Fe': 14, 'MgSiO3': 3.1, 'Na2S': 4.6}, ..., {'Fe': 14, 'MgSiO3': 3.9, 'Na2S': 2.8}]
 
     param_grid = create_parameter_grid(
         Teff_list=[1200],
@@ -432,7 +615,7 @@ if __name__ == "__main__":
     # Run the grid
     results, output_dir = run_parallel_grid(
         param_grid, 
-        runname='bd_grid_noCH4',  # Creates directory like "bd_grid_20241016_143022"
+        runname=runnerName,  # Creates directory like "bd_grid_20241016_143022"
         n_processes=4  # Adjust based on your CPU
     )
     
@@ -477,7 +660,8 @@ if __name__ == "__main__":
         p = show(vjpi.all_optics(virgadf))
 
     ## Load a specific model file, reload and reuse
-    model_file = glob.glob(os.path.join(output_dir, '*.nc'))[0]
+    nc_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith('.nc')]
+    model_file = nc_files[0]
     ds = xarray.load_dataset(model_file)
     print(f"Dataset dimensions: {ds.dims}")
     print(f"Available variables: {list(ds.data_vars)}")

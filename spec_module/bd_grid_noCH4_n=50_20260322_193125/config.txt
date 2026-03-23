@@ -1,0 +1,1000 @@
+modelbd_1200_10000_1.0000E+07_1.0000_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.0
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0040_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.004
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0080_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.008
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0120_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.012
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0160_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.016
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0200_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.02
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0240_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.024
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0280_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.028
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0320_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.032
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0360_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.036
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0400_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.04
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0440_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.044
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0480_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.048
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0520_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.052
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0560_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.056
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0600_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.06
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0640_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.064
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0680_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.068
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0720_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.072
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0760_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.076
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0800_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.08
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0840_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.084
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0880_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.088
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0920_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.092
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.0960_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.096
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1000_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.1
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1040_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.104
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1080_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.108
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1120_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.112
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1160_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.116
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1200_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.12
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1240_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.124
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1280_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.128
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1320_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.132
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1360_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.136
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1400_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.14
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1440_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.144
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1480_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.148
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1520_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.152
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1560_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.156
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1600_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.16
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1640_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.164
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1680_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.168
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1720_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.172
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1760_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.176
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1800_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.18
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1840_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.184
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1880_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.188
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1920_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.192
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1200_10000_1.0000E+07_1.1960_cloudy:
+  Atmosphere:
+    Teff       : 1200 K
+    C_to_O     : 0.0
+    mh         : 1.0
+    gravity    : 10000 m/s^2
+    kzz        : 10000000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [1, 6] micron
+    eq         : False
+    excluded_mol: CH4
+  Clouds:
+    fsed       : 1.196
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'Na2S']
+    R          : 700
+  Output:
+
+----------------------------------------------------------------------------------------------------
+

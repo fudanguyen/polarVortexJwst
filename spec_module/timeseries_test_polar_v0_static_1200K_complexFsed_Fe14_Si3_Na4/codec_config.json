@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "codec_definitions": {
+    "cloud_thickness": {
+      "max_value": 20,
+      "values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "description": "Cloud optical depth levels"
+    }
+  },
+  "codec_order": [
+    "cloud_thickness"
+  ],
+  "spectra_assignments": {
+    "0": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.10-Na2S4.60_cloudy.csv",
+    "1": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.14-Na2S4.51_cloudy.csv",
+    "2": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.18-Na2S4.41_cloudy.csv",
+    "3": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.23-Na2S4.32_cloudy.csv",
+    "4": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.27-Na2S4.22_cloudy.csv",
+    "5": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.31-Na2S4.13_cloudy.csv",
+    "6": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.35-Na2S4.03_cloudy.csv",
+    "7": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.39-Na2S3.94_cloudy.csv",
+    "8": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.44-Na2S3.84_cloudy.csv",
+    "9": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.48-Na2S3.75_cloudy.csv",
+    "10": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.52-Na2S3.65_cloudy.csv",
+    "11": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.56-Na2S3.56_cloudy.csv",
+    "12": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.61-Na2S3.46_cloudy.csv",
+    "13": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.65-Na2S3.37_cloudy.csv",
+    "14": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.69-Na2S3.27_cloudy.csv",
+    "15": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.73-Na2S3.18_cloudy.csv",
+    "16": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.77-Na2S3.08_cloudy.csv",
+    "17": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.82-Na2S2.99_cloudy.csv",
+    "18": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.86-Na2S2.89_cloudy.csv",
+    "19": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742/spec_1200_10000_1.0E+07_Fe14.00-MgSiO33.90-Na2S2.80_cloudy.csv"
+  },
+  "metadata": {
+    "created": "2026-03-21T15:53:35.376371",
+    "total_combinations": 20,
+    "assigned_spectra": 20
+  }
+}
