@@ -1809,6 +1809,9 @@ if __name__ == "__main__":
     # runName = 'jwst_v0_static'
     # runName = 'jwst_v0_dynamic'
 
+    # runName = 'jwst_v1_static'
+    # runName = 'jwst_v1_dynamic'
+
     # Set up band_config: latitudinal features
     Ppol, Pband, Prot = 60, 5, 5  # Periods in hours
     Fpolar, Fband, Fambient = 0.98, 1, 1 # amp
@@ -1820,12 +1823,13 @@ if __name__ == "__main__":
     '''
 
     ### For test and jwst 
-    bandConfig = [
-        # [lat2, lat1, amplitude, type, phase, period]
-        [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
-        [15, 5, Fband, 'B', 0, Pband, Prot, Fband_var], 
-        [-5, -15, Fband, 'B', 0, Pband, Prot, Fband_var],
-        [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
+    if 'test_polar_v0' in runName or 'jwst_v0' in runName:
+        bandConfig = [
+            # [lat2, lat1, amplitude, type, phase, period]
+            [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
+            [15, 5, Fband, 'B', 0, Pband, Prot, Fband_var], 
+            [-5, -15, Fband, 'B', 0, Pband, Prot, Fband_var],
+            [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
 
     ### For test_onlyVortex
     if 'test_onlyVortex' in runName:
@@ -1836,19 +1840,19 @@ if __name__ == "__main__":
             [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
             [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
 
-    if 'test_polar_v1' in runName:
+    if 'test_polar_v1' in runName or 'jwst_v1' in runName:
         Fpolar, Fband, Fambient = 1, 1, 1 # amp
         Fpolar_var, Fband_var, Fambient_var = 0.02, 0.15, 0.00 # variab
         bandConfig = [
             # [lat2, lat1, amplitude, type, phase, period]
             [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
-            [17, 10, Fband, 'B', 0, Pband/2, Prot, Fband_var],
+            [17, 10, Fband, 'B', 0, Pband/2+0.1, Prot, Fband_var],
             [8, 2, Fband, 'B', 10, Pband, Prot, Fband_var], 
-            [-2, -8, Fband, 'B', 10, Pband, Prot, Fband_var],
+            [-2, -8, Fband, 'B', 10, Pband-0.15, Prot, Fband_var],
             [-10, -17, Fband, 'B', 0, Pband/2, Prot, Fband_var],
             [-65, -90, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var]]
 
-    if 'test_polar_v2' in runName:
+    if 'test_polar_v2' in runName or 'jwst_v2' in runName:
         Fpolar, Fband, Fambient = 1, 1, 1 # amp
         Fpolar_var, Fband_var, Fambient_var = 0.02, 0.15, 0.00 # variab
         bandConfig = [

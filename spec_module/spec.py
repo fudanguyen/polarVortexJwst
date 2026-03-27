@@ -598,13 +598,13 @@ if __name__ == "__main__":
         # → [{'Fe': 14, 'MgSiO3': 3.1, 'Na2S': 4.6}, ..., {'Fe': 14, 'MgSiO3': 3.9, 'Na2S': 2.8}]
 
     param_grid = create_parameter_grid(
-        Teff_list=[1200],
+        Teff_list=[1200], # 
         C_to_O_list=[0.],
         wave_range_list=[[1, 6]],
-        R_list=[700],
-        gravity_list=[10000],
-        fsed_list=fsed_list,
-        excluded_mol_list=['CH4'],
+        R_list=[700], # Spectral resolution for regridding the output spectrum
+        gravity_list=[10000], # gravity in unit of m/s^2
+        fsed_list=fsed_list, # the range of fsed values to run (either in simple mode (same or all gases) or complex mode (per-species))
+        excluded_mol_list=['CH4'], # gas to exclude from the atmosphere (e.g. to test its impact on the spectrum)
         gases_list=[['Fe', 'MgSiO3', 'Na2S']],
         kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only

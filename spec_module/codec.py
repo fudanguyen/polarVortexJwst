@@ -1093,9 +1093,9 @@ if __name__ == "__main__":
     # photrunName = 'test_polar_v0_dynamic.h5'
 
     # photrunName = 'test_polar_v1_static.h5'
-    # photrunName = 'test_polar_v1_dynamic.h5'
+    photrunName = 'test_polar_v1_dynamic.h5'
 
-    photrunName = 'test_polar_v2_static.h5'
+    # photrunName = 'test_polar_v2_static.h5'
     # photrunName = 'test_polar_v2_dynamic.h5'
 
     ### polar long-baseline static/dyamic
@@ -1110,6 +1110,8 @@ if __name__ == "__main__":
     # photrunName = 'jwst_v0_static.h5'
     # photrunName = 'jwst_v0_dynamic.h5'
 
+    # photrunName = 'jwst_v1_static.h5'
+
     path = os.path.join(photometryh5dir, photrunName)
     results = readPhotometry(path)
 
@@ -1121,14 +1123,14 @@ if __name__ == "__main__":
     # n = 20
     
     ### Simple fsed, n=50
-    # specConfigName = f'1200K_clouds=50'
-    # specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
-    # n = 50
+    specConfigName = f'1200K_clouds=50'
+    specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
+    n = 50
 
     ### Comlex fsed per species, n=20
-    specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4'
-    specFolderName = 'bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742'
-    n = 20
+    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4'
+    # specFolderName = 'bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742'
+    # n = 20
     
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 
