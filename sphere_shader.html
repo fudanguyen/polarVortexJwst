@@ -1,0 +1,1904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Brown Dwarf Simulator — Shader</title>
+    <style>
+        html, body {
+            width: 100%; height: 100%;
+            margin: 0; padding: 0;
+            overflow: hidden; background: #000;
+        }
+        #controls {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.7); padding: 15px;
+            border-radius: 8px; color: white;
+            font-family: Arial, sans-serif; font-size: 14px;
+            z-index: 1000; max-height: 90vh; overflow-y: auto;
+        }
+        #controls h3 { margin: 0 0 10px 0; color: #ffa500; }
+        #controls h4 { margin: 15px 0 8px 0; color: #88ccff; font-size: 13px; }
+        .slider-group { margin: 8px 0; }
+        .slider-group label { display: block; margin-bottom: 3px; }
+        .slider-group input[type="range"] { width: 150px; }
+        .toggle-container { display: flex; align-items: center; cursor: pointer; }
+        .toggle-container input[type="checkbox"] { width: 18px; height: 18px; margin-right: 8px; }
+        .toggle-label { font-size: 13px; }
+        #vorticesState, #polarDynamicState { color: #4CAF50; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<!-- ── Controls panel (left) ─────────────────────────────── -->
+<div id="controls">
+    <h3>Brown Dwarf Simulator</h3>
+
+    <div style="font-size: 12px; color: #aaa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        <span>Inclination:</span>
+        <input type="number" id="inclinationInput" value="30" min="-90" max="90" step="1" style="
+            width: 50px; background: #1a1a2e; color: #ffaa44;
+            border: 1px solid #334; border-radius: 3px;
+            padding: 2px 4px; font-size: 12px;">
+        <span style="color: #ffaa44;">°</span>
+    </div>
+
+    <button id="modeToggle" onclick="toggleMode()" style="
+        margin-bottom: 12px; padding: 6px 12px;
+        background: #334; border: 1px solid #88ccff;
+        border-radius: 4px; color: #88ccff;
+        cursor: pointer; font-size: 12px; width: 100%;">
+        Advanced Mode
+    </button>
+
+    <div class="slider-group">
+        <label>Color Map</label>
+        <select id="colormapSelect" style="width: 150px; background: #1a1a2e; color: white; border: 1px solid #334; border-radius: 3px; padding: 3px;">
+            <option value="inferno">Inferno</option>
+            <option value="viridis">Viridis</option>
+            <option value="plasma">Plasma</option>
+            <option value="gray">Gray</option>
+            <option value="hot">Hot</option>
+        </select>
+    </div>
+
+    <!-- ── Simple mode ───────────────────────────────────── -->
+    <div id="simpleMode">
+        <h4>Bands</h4>
+        <div class="slider-group">
+            <label>Number of Bands: <span id="nBandsVal">4</span></label>
+            <input type="range" id="nBands" min="0" max="4" step="1" value="4">
+        </div>
+        <div class="slider-group">
+            <label>Wave Amplitude: <span id="waveAmpVal">1.00</span></label>
+            <input type="range" id="waveAmp" min="0" max="2" step="0.05" value="1.0">
+        </div>
+
+        <h4>Polar Regions</h4>
+        <div class="slider-group">
+            <label>Polar Variability: <span id="polarVarVal">1.00</span></label>
+            <input type="range" id="polarVar" min="0" max="2" step="0.05" value="1.0">
+        </div>
+        <div class="slider-group" style="margin-bottom: 12px;">
+            <label class="toggle-container">
+                <input type="checkbox" id="polarDynamicToggle">
+                <span class="toggle-label">Polar Dynamic: <span id="polarDynamicState">OFF</span></span>
+            </label>
+        </div>
+
+        <h4>Vortices</h4>
+        <div class="slider-group" style="margin-bottom: 12px;">
+            <label class="toggle-container">
+                <input type="checkbox" id="vorticesToggle" checked>
+                <span class="toggle-label">Vortices: <span id="vorticesState">ON</span></span>
+            </label>
+        </div>
+        <div class="slider-group">
+            <label>Number of Vortices: <span id="nVorticeVal">5</span></label>
+            <input type="range" id="nVortice" min="0" max="6" step="1" value="5">
+        </div>
+        <div class="slider-group">
+            <label>Vortex Amplitude: <span id="vortexAmpVal">0.20</span></label>
+            <input type="range" id="vortexAmp" min="0" max="2" step="0.05" value="0.2">
+        </div>
+        <div class="slider-group">
+            <label>Vortex Size: <span id="vortexSizeVal">5.0</span></label>
+            <input type="range" id="vortexSize" min="1" max="20" step="0.5" value="5">
+        </div>
+    </div>
+
+    <!-- ── Advanced mode ─────────────────────────────────── -->
+    <div id="advancedMode" style="display: none;">
+        <h4 style="color: #ffaa44;">Band Configuration</h4>
+        <p style="font-size: 11px; color: #aaa; margin-bottom: 8px;">
+            Each row is one atmospheric band or polar cap.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 50px 50px 45px 40px 50px 50px 55px 24px;
+                    gap: 3px; font-size: 10px; color: #88ccff; margin-bottom: 4px;">
+            <span>LatMax</span><span>LatMin</span><span>Amp</span><span>Type</span>
+            <span>Phase</span><span>Period</span><span>Variab</span><span></span>
+        </div>
+
+        <div id="bandRows"></div>
+
+        <button onclick="addBand()" style="
+            margin-top: 8px; padding: 5px 10px;
+            background: #223; border: 1px solid #4CAF50;
+            border-radius: 4px; color: #4CAF50;
+            cursor: pointer; font-size: 12px; width: 100%;">
+            + Add Band
+        </button>
+
+        <h4 style="color: #ffaa44; margin-top: 16px;">Vortex Configuration</h4>
+
+        <div style="margin-bottom: 8px;">
+            <label class="toggle-container">
+                <input type="checkbox" id="polarDynamicToggleAdv">
+                <span class="toggle-label">Polar Dynamic: <span id="polarDynamicStateAdv" style="color: #f44336; font-weight: bold;">OFF</span></span>
+            </label>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 120px 80px; gap: 6px 8px; align-items: center; margin-bottom: 10px; font-size: 12px;">
+            <label>Center Latitude (°)</label>
+            <input type="number" id="vortexCenterLat" value="80" step="1" style="
+                background: #1a1a2e; color: white; border: 1px solid #334;
+                border-radius: 3px; padding: 3px 6px; font-size: 12px; width: 100%;">
+
+            <label>Amplitude</label>
+            <input type="number" id="vortexAmpAdv" value="0.2" step="0.01" style="
+                background: #1a1a2e; color: white; border: 1px solid #334;
+                border-radius: 3px; padding: 3px 6px; font-size: 12px; width: 100%;">
+
+            <label>Size (°)</label>
+            <input type="number" id="vortexSizeAdv" value="5.0" step="0.5" style="
+                background: #1a1a2e; color: white; border: 1px solid #334;
+                border-radius: 3px; padding: 3px 6px; font-size: 12px; width: 100%;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 30px 80px 24px;
+                gap: 3px; font-size: 10px; color: #88ccff; margin-bottom: 4px;">
+            <span>#</span><span>Phase</span><span></span>
+        </div>
+
+        <div id="vortexRows"></div>
+
+        <button onclick="addVortex()" style="
+            margin-top: 8px; padding: 5px 10px;
+            background: #223; border: 1px solid #4CAF50;
+            border-radius: 4px; color: #4CAF50;
+            cursor: pointer; font-size: 12px; width: 100%;">
+            + Add Vortex
+        </button>
+    </div>
+
+</div>
+<!-- ── End controls panel ────────────────────────────────── -->
+
+<!-- ── Light curve panel (top right) ────────────────────── -->
+<div id="lightCurvePanel" style="
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(0,0,0,0.8); padding: 15px;
+    border-radius: 8px; color: white;
+    font-family: Arial, sans-serif; font-size: 12px;
+    z-index: 1000; width: 300px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h3 style="margin: 0; color: #88ccff; font-size: 14px;">Light Curve</h3>
+        <div style="display: flex; align-items: center; gap: 6px;">
+            <button onclick="resetLightCurve()" style="background: #1a1a2e; color: #aaa; border: 1px solid #334;
+                border-radius: 3px; padding: 2px 7px; font-size: 11px;
+                cursor: pointer;">Reset</button>
+            <label style="font-size: 11px; color: #aaa;">Update every</label>
+            <input type="number" id="lcUpdateRate" value="5" min="1" max="60" style="
+                width: 35px; background: #1a1a2e; color: white;
+                border: 1px solid #334; border-radius: 3px;
+                padding: 2px 4px; font-size: 11px;">
+            <span style="font-size: 11px; color: #aaa;">frames</span>
+        </div>
+    </div>
+    <canvas id="lightCurveCanvas" width="270" height="120" style="
+        background: #111; border: 1px solid #333;
+        border-radius: 4px; display: block;"></canvas>
+    <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 10px; color: #666;">
+        <span>← older</span>
+        <span id="lcAmplitude" style="color: #ffaa44;"></span>
+        <span>newer →</span>
+    </div>
+</div>
+<!-- ── End light curve panel ─────────────────────────────── -->
+
+<!-- ── Codec / Spectrum panel ────────────────────────────── -->
+<div id="codecPanel" style="
+    position: absolute; top: 245px; right: 100px;
+    background: rgba(0,0,0,0.8); padding: 15px;
+    border-radius: 8px; color: white;
+    font-family: Arial, sans-serif; font-size: 12px;
+    z-index: 1000; width: 300px">
+ 
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h3 style="margin: 0; color: #88ccff; font-size: 14px;">Individual Spectra</h3>
+        <div style="display: flex; gap: 6px;">
+            <button onclick="toggleExportPanel()" style="
+                background: #1a1a2e; color: #aaa;
+                border: 1px solid #334; border-radius: 4px;
+                padding: 3px 10px; font-size: 11px; cursor: pointer;">
+                ⬇ Export
+            </button>
+            <button onclick="computeCompositeSpectrum()" id="computeSpecBtn" style="
+                background: #1a2a3a; color: #88ccff;
+                border: 1px solid #88ccff; border-radius: 4px;
+                padding: 3px 10px; font-size: 11px; cursor: pointer;">
+                Compute
+            </button>
+        </div>
+    </div>
+ 
+    <canvas id="spectrumCanvas" width="400" height="280" style="
+        background: #111; border: 1px solid #333;
+        border-radius: 4px; display: block;"></canvas>
+ 
+    <div id="spectrumStatus" style="
+        margin-top: 5px; font-size: 10px; color: #666;
+        text-align: center; min-height: 14px;"></div>
+ 
+</div>
+<!-- ── End codec panel ────────────────────────────────────── -->
+
+<!-- ── Codec / Export panel ───────────────────────────────── -->
+
+<div id="exportPanel" style="
+    position: absolute; top: 245px; right: 450px;
+    background: rgba(0,0,0,0.8); padding: 15px;
+    border-radius: 8px; color: white;
+    font-family: Arial, sans-serif; font-size: 12px;
+    z-index: 1000; width: 300px;
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+    display: none;">
+
+    <h3 style="margin: 0 0 10px 0; color: #88ccff; font-size: 14px;">
+        Export Configurations
+    </h3>
+
+    <!-- ── Section 1: Simulation Config ── -->
+    <h4 style="margin: 0 0 6px 0; color: #ffaa44; font-size: 12px;">
+        Simulation Configuration
+    </h4>
+    <p style="font-size: 10px; color: #666; margin: 0 0 8px 0;">
+        Select a preset or use current GUI settings for main.py
+    </p>
+
+    <div id="simPresetButtons" style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px;">
+        <button onclick="selectSimPreset('default')" id="simBtn_default" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            🪐 Default Brown Dwarf
+            <span style="color:#666; font-size:10px; float:right;">polarStatic</span>
+        </button>
+        <button onclick="selectSimPreset('active')" id="simBtn_active" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            🌀 Active Vortices
+            <span style="color:#666; font-size:10px; float:right;">polarDynamic</span>
+        </button>
+        <button onclick="selectSimPreset('quiet')" id="simBtn_quiet" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            😶 Quiet Atmosphere
+            <span style="color:#666; font-size:10px; float:right;">polarStatic</span>
+        </button>
+        <button onclick="selectSimPreset('current')" id="simBtn_current" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            ⚙️ Use Current GUI Settings
+            <span style="color:#666; font-size:10px; float:right;">custom</span>
+        </button>
+    </div>
+
+    <div id="simPresetDesc" style="
+        background: #1a1a2e; border: 1px solid #334;
+        border-radius: 4px; padding: 8px; margin-bottom: 8px;
+        font-size: 10px; color: #aaa; display: none; line-height: 1.5;">
+    </div>
+
+    <!-- Time config options -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; font-size: 11px;">
+
+        <div>
+            <label style="color: #aaa;">Start time (hrs)</label>
+            <input type="number" id="simT0" value="0" min="0" style="
+                width: 100%; background: #1a1a2e; color: white;
+                border: 1px solid #334; border-radius: 3px;
+                padding: 3px 5px; font-size: 11px; margin-top: 2px;">
+        </div>
+        <div>
+            <label style="color: #aaa;">End time (hrs)</label>
+            <input type="number" id="simT1" value="60" min="1" style="
+                width: 100%; background: #1a1a2e; color: white;
+                border: 1px solid #334; border-radius: 3px;
+                padding: 3px 5px; font-size: 11px; margin-top: 2px;">
+        </div>
+
+        <div>
+            <label style="color: #aaa;">Frames</label>
+            <input type="number" id="simFrames" value="120" min="10" style="
+                width: 100%; background: #1a1a2e; color: white;
+                border: 1px solid #334; border-radius: 3px;
+                padding: 3px 5px; font-size: 11px; margin-top: 2px;">
+        </div>
+
+        <div style="grid-column: span 2;">
+            <label style="color: #aaa;">Inclinations (°, comma separated)</label>
+            <input type="text" id="simInclinations" value="0,20,40,60,80" style="
+                width: 100%; background: #1a1a2e; color: white;
+                border: 1px solid #334; border-radius: 3px;
+                padding: 3px 5px; font-size: 11px; margin-top: 2px;">
+        </div>
+        
+    </div>
+
+    <button onclick="exportSimConfig()" style="
+        width: 100%; padding: 7px; margin-bottom: 14px;
+        background: #1a2a3a; border: 1px solid #88ccff;
+        border-radius: 4px; color: #88ccff;
+        cursor: pointer; font-size: 12px;">
+        ⬇ Export Simulation Settings (.py)
+    </button>
+
+    <div style="border-top: 1px solid #222; margin-bottom: 12px;"></div>
+
+    <!-- ── Section 2: Cloud Config ── -->
+    <h4 style="margin: 0 0 6px 0; color: #ffaa44; font-size: 12px;">
+        Cloud Configuration
+    </h4>
+    <p style="font-size: 10px; color: #666; margin: 0 0 8px 0;">
+        Select a cloud model preset for codec.py
+    </p>
+
+    <div id="cloudPresetButtons" style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px;">
+        <button onclick="selectCloudPreset('clearsky')" id="cloudBtn_clearsky" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            ☀️ Clear Sky
+            <span style="color:#666; font-size:10px; float:right;">no clouds</span>
+        </button>
+        <button onclick="selectCloudPreset('thin')" id="cloudBtn_thin" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            🌤 Thin Clouds
+            <span style="color:#666; font-size:10px; float:right;">fsed=8</span>
+        </button>
+        <button onclick="selectCloudPreset('thick')" id="cloudBtn_thick" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            ⛅ Thick Clouds
+            <span style="color:#666; font-size:10px; float:right;">fsed=2</span>
+        </button>
+        <button onclick="selectCloudPreset('iron')" id="cloudBtn_iron" style="
+            padding: 6px 10px; background: #1a1a2e;
+            border: 1px solid #334; border-radius: 4px;
+            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
+            🔩 Iron Clouds
+            <span style="color:#666; font-size:10px; float:right;">MgSiO₃+Fe</span>
+        </button>
+    </div>
+
+    <div id="cloudPresetDesc" style="
+        background: #1a1a2e; border: 1px solid #334;
+        border-radius: 4px; padding: 8px; margin-bottom: 8px;
+        font-size: 10px; color: #aaa; display: none; line-height: 1.5;">
+    </div>
+
+    <button onclick="exportCloudConfig()" id="exportCloudBtn" style="
+        width: 100%; padding: 7px; margin-bottom: 10px;
+        background: #1a2a3a; border: 1px solid #88ccff;
+        border-radius: 4px; color: #88ccff;
+        cursor: pointer; font-size: 12px;" disabled>
+        ⬇ Export cloud_config.json
+    </button>
+
+    <div style="border-top: 1px solid #222; margin-bottom: 10px;"></div>
+
+    <!-- ── Instructions ── -->
+    <div style="font-size: 10px; color: #555; line-height: 1.6;">
+        <span style="color: #aaa;">How to use:</span><br>
+        1. Export both config files<br>
+        2. <code style="color:#88ccff;">python main.py --config simulation_config.json</code><br>
+        3. <code style="color:#88ccff;">python codec.py --config cloud_config.json</code>
+    </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+
+// ════════════════════════════════════════════════════════════
+// 1. SCENE SETUP
+// ════════════════════════════════════════════════════════════
+
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.lookAt(0, 0, 0);
+
+const lcCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
+lcCamera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x333333));
+
+
+// ════════════════════════════════════════════════════════════
+// 2. CONTROL STATE
+// ════════════════════════════════════════════════════════════
+
+let waveAmp      = 0.15;
+let polarVar     = 0.05;
+let nBands       = 4;
+let nVortices    = 5;
+let vortexAmp    = 0.2;
+let showVortices = true;
+let polarDynamic = false;
+let isAdvancedMode = false;
+
+
+// ════════════════════════════════════════════════════════════
+// 3. CAMERA & MOUSE CONTROLS
+// ════════════════════════════════════════════════════════════
+
+let isDragging     = false;
+let prevMouseX     = 0, prevMouseY = 0;
+let inclination    = 30;
+let cameraDistance = 3;
+
+function updateCamera() {
+    const rad = inclination * Math.PI / 180;
+    camera.position.set(0, cameraDistance * Math.sin(rad), cameraDistance * Math.cos(rad));
+    camera.lookAt(0, 0, 0);
+    lcCamera.position.set(0, 3*Math.sin(rad), 3*Math.cos(rad));
+    lcCamera.lookAt(0, 0, 0);
+}
+updateCamera();
+
+document.addEventListener('mousedown', e => {
+    isDragging = true;
+    prevMouseX = e.clientX;
+    prevMouseY = e.clientY;
+});
+document.addEventListener('mouseup', () => { isDragging = false; });
+document.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - prevMouseX;
+    const dy = e.clientY - prevMouseY;
+    prevMouseX = e.clientX;
+    prevMouseY = e.clientY;
+    sphere.rotation.y += dx * 0.01;
+    inclination = Math.max(-90, Math.min(90, inclination + dy * 0.3));
+    document.getElementById('inclinationInput').value = Math.round(inclination);
+    updateCamera();
+});
+document.addEventListener('wheel', e => {
+    cameraDistance = Math.max(1.5, Math.min(6, cameraDistance + e.deltaY * 0.001));
+    updateCamera();
+});
+
+document.getElementById('inclinationInput').addEventListener('input', e => {
+    inclination = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
+    updateCamera();
+});
+
+
+// ════════════════════════════════════════════════════════════
+// 4. DRIFT POSITIONS
+// ════════════════════════════════════════════════════════════
+
+const MAX_VORTICES = 6;
+const DRIFT_STEPS  = 120;
+
+function generateDrift() {
+    const centerLatRad   = 80 * Math.PI / 180;
+    const rVorticeApprox = Math.sqrt(0.00075 * 2 * Math.PI * Math.abs(
+        Math.sin(80 * Math.PI / 180) - Math.sin(65 * Math.PI / 180)
+    )) * (1024 / Math.PI);
+    const angStepSize = (rVorticeApprox / 2 / 512) * 180;
+    const maxAngDrift = (rVorticeApprox / 2 / 512) * 180;
+
+    let seed = 11;
+    function rand() {
+        seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+        return (seed >>> 0) / 0xffffffff;
+    }
+
+    const angles = Array.from({length: MAX_VORTICES}, () =>
+        Array.from({length: DRIFT_STEPS}, () => rand() * 2 * Math.PI));
+
+    const drift = new Float32Array(MAX_VORTICES * DRIFT_STEPS * 2);
+
+    for (let v = 0; v < MAX_VORTICES; v++) {
+        let cumLon = 0, cumLat = 0;
+        for (let ti = 0; ti < DRIFT_STEPS; ti++) {
+            const a    = angles[v][ti];
+            const sLon = angStepSize * Math.cos(a) / Math.cos(centerLatRad);
+            const sLat = angStepSize * Math.sin(a);
+            const pLon = cumLon + sLon, pLat = cumLat + sLat;
+            const d    = Math.sqrt(pLat**2 + (pLon * Math.cos(centerLatRad))**2);
+            if (d <= maxAngDrift) { cumLon = pLon; cumLat = pLat; }
+            drift[(v * DRIFT_STEPS + ti) * 2 + 0] = cumLon;
+            drift[(v * DRIFT_STEPS + ti) * 2 + 1] = cumLat;
+        }
+    }
+    return drift;
+}
+
+const driftTexture = new THREE.DataTexture(
+    generateDrift(), DRIFT_STEPS, MAX_VORTICES,
+    THREE.RGFormat, THREE.FloatType
+);
+driftTexture.needsUpdate = true;
+
+
+// ════════════════════════════════════════════════════════════
+// 5. COLORMAP
+// ════════════════════════════════════════════════════════════
+
+function generateColormapTexture(name) {
+    const colormaps = {
+        inferno: [
+            [0,0,4],[40,11,84],[101,21,110],[159,42,99],
+            [212,72,66],[245,125,21],[250,193,39],[252,255,164],
+        ],
+        viridis: [
+            [68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37],
+        ],
+        plasma: [
+            [13,8,135],[126,3,168],[204,71,120],[248,149,64],[240,249,33],
+        ],
+        gray: [[0,0,0],[255,255,255]],
+        hot: [
+            [0,0,0],[128,0,0],[255,0,0],[255,128,0],[255,255,0],[255,255,255],
+        ],
+    };
+
+    const stops = colormaps[name] || colormaps.inferno;
+    const width = 256;
+    const data  = new Uint8Array(width * 4);
+
+    for (let i = 0; i < width; i++) {
+        const t      = i / (width - 1);
+        const scaled = t * (stops.length - 1);
+        const idx    = Math.floor(scaled);
+        const frac   = scaled - idx;
+        const c0     = stops[Math.min(idx,     stops.length - 1)];
+        const c1     = stops[Math.min(idx + 1, stops.length - 1)];
+        data[i*4+0]  = Math.round(c0[0] + frac * (c1[0] - c0[0]));
+        data[i*4+1]  = Math.round(c0[1] + frac * (c1[1] - c0[1]));
+        data[i*4+2]  = Math.round(c0[2] + frac * (c1[2] - c0[2]));
+        data[i*4+3]  = 255;
+    }
+
+    const tex = new THREE.DataTexture(data, width, 1, THREE.RGBAFormat);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
+}
+
+
+// ════════════════════════════════════════════════════════════
+// 6. BAND TEXTURE
+// ════════════════════════════════════════════════════════════
+
+const MAX_BANDS     = 20;
+const bandDataArray = new Float32Array(MAX_BANDS * 7 * 4);
+
+const bandTexture = new THREE.DataTexture(
+    bandDataArray, MAX_BANDS, 7, THREE.RGBAFormat, THREE.FloatType
+);
+bandTexture.magFilter = THREE.NearestFilter;
+bandTexture.minFilter = THREE.NearestFilter;
+bandTexture.needsUpdate = true;
+
+let advancedBands = [
+    { latMax: 90,  latMin: 65,  amp: 0.98, type: 'P', phase: 0, period: 30,  variab: 0.10 },
+    { latMax: 28,  latMin: 20,  amp: 1.0,  type: 'B', phase: 0, period: 2.35, variab: 0.30 },
+    { latMax: 12,   latMin: 5,   amp: 1.0,  type: 'B', phase: 0, period: 4.8, variab: 0.30 },
+    { latMax: -5,  latMin: -12,  amp: 1.0,  type: 'B', phase: 0, period: 5.0, variab: 0.30 },
+    { latMax: -20, latMin: -28, amp: 1.0,  type: 'B', phase: 0, period: 2.5, variab: 0.30 },
+    { latMax: -65, latMin: -90, amp: 0.98, type: 'P', phase: 0, period: 30,  variab: 0.10 },
+];
+
+function applyAdvancedBands() {
+    const n = Math.min(advancedBands.length, MAX_BANDS);
+    uniforms.nBandsAdv.value = n;
+    for (let i = 0; i < n; i++) {
+        const b    = advancedBands[i];
+        const vals = [b.latMax, b.latMin, b.amp,
+                      b.type === 'P' ? 2.0 : 1.0,
+                      b.phase, b.period, b.variab];
+        for (let row = 0; row < 7; row++) {
+            bandDataArray[(row * MAX_BANDS + i) * 4] = vals[row];
+        }
+    }
+    bandTexture.needsUpdate = true;
+}
+
+
+// ════════════════════════════════════════════════════════════
+// 7. VORTEX PHASE TEXTURE
+// ════════════════════════════════════════════════════════════
+
+const vortexPhaseArray   = new Float32Array(MAX_VORTICES * 4);
+const vortexPhaseTexture = new THREE.DataTexture(
+    vortexPhaseArray, MAX_VORTICES, 1, THREE.RGBAFormat, THREE.FloatType
+);
+vortexPhaseTexture.magFilter = THREE.NearestFilter;
+vortexPhaseTexture.minFilter = THREE.NearestFilter;
+vortexPhaseTexture.needsUpdate = true;
+
+let advancedVortices = [
+    { phase: 3.9 }, { phase: 3.0 }, { phase: 2.1 },
+    { phase: 0.3 }, { phase: 2.7 },
+];
+
+function applyAdvancedVortices() {
+    const n = Math.min(advancedVortices.length, MAX_VORTICES);
+    uniforms.nVortices.value = n;
+    for (let i = 0; i < MAX_VORTICES; i++) {
+        vortexPhaseArray[i * 4] = i < n ? advancedVortices[i].phase : 0.0;
+    }
+    vortexPhaseTexture.needsUpdate = true;
+}
+
+
+// ════════════════════════════════════════════════════════════
+// 8. SHADER MATERIAL
+// ════════════════════════════════════════════════════════════
+
+const uniforms = {
+    time:            { value: 0.0 },
+    waveAmp:         { value: 0.15 },
+    polarVar:        { value: 0.05 },
+    nBands:          { value: 4 },
+    nVortices:       { value: 5 },
+    vortexAmp:       { value: 0.2 },
+    vortexSize:      { value: 5.0 },
+    showVortices:    { value: true },
+    polarDynamic:    { value: false },
+    driftTex:        { value: driftTexture },
+    vortexPhaseTex:  { value: vortexPhaseTexture },
+    vortexCenterLat: { value: 80.0 },
+    bandTex:         { value: bandTexture },
+    nBandsAdv:       { value: advancedBands.length },
+    isAdvancedMode:  { value: false },
+    colorMin:        { value: 0.0 },
+    colorMax:        { value: 2.0 },
+    colormapTex:     { value: generateColormapTexture('inferno') },
+};
+
+const vertexShader = `
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    varying vec3 vViewDir;
+
+    void main() {
+        vPosition   = position;
+        vNormal     = normalize(normalMatrix * normal);
+        vViewDir    = normalize(cameraPosition - (modelMatrix * vec4(position, 1.0)).xyz);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+
+const fragmentShader = `
+    uniform float     time;
+    uniform float     waveAmp;
+    uniform float     polarVar;
+    uniform int       nBands;
+    uniform int       nVortices;
+    uniform float     vortexAmp;
+    uniform float     vortexSize;
+    uniform bool      showVortices;
+    uniform bool      polarDynamic;
+    uniform sampler2D driftTex;
+    uniform sampler2D vortexPhaseTex;
+    uniform float     vortexCenterLat;
+    uniform sampler2D bandTex;
+    uniform int       nBandsAdv;
+    uniform bool      isAdvancedMode;
+    uniform float     colorMin;
+    uniform float     colorMax;
+    uniform sampler2D colormapTex;
+
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    varying vec3 vViewDir;
+
+    #define PI       3.14159265358979
+    #define PBAND    5.0
+    #define PROT     5.0
+    #define MAX_V    10
+    #define MAX_BANDS 20
+
+    float getBandParam(int paramRow, int bandIdx) {
+        float u = (float(bandIdx) + 0.5) / float(MAX_BANDS);
+        float v = (float(paramRow) + 0.5) / 7.0;
+        return texture2D(bandTex, vec2(u, v)).r;
+    }
+
+    vec2 stereo(float lat, float lon, float lat0, float lon0) {
+        float latr  = radians(lat),  lonr  = radians(lon);
+        float lat0r = radians(lat0), lon0r = radians(lon0);
+        float dlon  = lonr - lon0r;
+        dlon = mod(dlon + PI, 2.0*PI) - PI;
+        float k = 2.0 / (1.0 + sin(lat0r)*sin(latr) + cos(lat0r)*cos(latr)*cos(dlon));
+        return vec2(k * cos(latr) * sin(dlon),
+                    k * (cos(lat0r)*sin(latr) - sin(lat0r)*cos(latr)*cos(dlon)));
+    }
+
+    vec2 getDrift(int v, int ti) {
+        float u  = (float(ti) + 0.5) / float(120);
+        float vv = (float(v)  + 0.5) / float(6);
+        return texture2D(driftTex, vec2(u, vv)).rg;
+    }
+
+    float equidistantLon(int v, float t, float rotPeriod) {
+        float base  = (float(v) / float(nVortices)) * 360.0;
+        float drift = (mod(-t, rotPeriod) / rotPeriod) * 360.0;
+        return mod(base + drift + 360.0, 360.0);
+    }
+
+    float getVortexPhase(int v) {
+        float u = (float(v) + 0.5) / float(6);
+        return texture2D(vortexPhaseTex, vec2(u, 0.5)).r;
+    }
+
+    void main() {
+        float lat = degrees(asin(clamp(vPosition.y, -1.0, 1.0)));
+        float lon = degrees(atan(vPosition.z, vPosition.x)) + 180.0;
+
+        float Fpolar_var = polarVar;
+        float Fband_var  = waveAmp;
+
+        float polarCapTop    =  65.0;
+        float polarCapBottom = -65.0;
+
+        float bandPeriods[8];
+        bandPeriods[0]=2.5; bandPeriods[1]=4.0; bandPeriods[2]=7.0; bandPeriods[3]=3.0;
+        bandPeriods[4]=5.0; bandPeriods[5]=2.0; bandPeriods[6]=6.0; bandPeriods[7]=3.5;
+
+        float brightness = 1.0;
+        float bandPeriod = PBAND;
+        float bandPhase  = 0.0;
+        float bandVariab = 0.0;
+        int   pixelType  = 0;
+        float bandLatMax = 0.0;
+        float bandLatMin = 0.0;
+
+        if (isAdvancedMode) {
+            for (int i = 0; i < MAX_BANDS; i++) {
+                if (i >= nBandsAdv) break;
+                float bLatMax = getBandParam(0, i);
+                float bLatMin = getBandParam(1, i);
+                float bAmp    = getBandParam(2, i);
+                float bType   = getBandParam(3, i);
+                float bPhase  = getBandParam(4, i);
+                float bPeriod = getBandParam(5, i);
+                float bVariab = getBandParam(6, i);
+                if (lat <= bLatMax && lat >= bLatMin) {
+                    brightness = bAmp;
+                    pixelType  = int(bType);
+                    bandPhase  = bPhase;
+                    bandPeriod = bPeriod;
+                    bandVariab = bVariab;
+                    bandLatMax = bLatMax;
+                    bandLatMin = bLatMin;
+                    break;
+                }
+            }
+        } else {
+            if (lat >= polarCapTop) {
+                pixelType=2; bandVariab=Fpolar_var; bandPeriod=10.0;
+                brightness=0.98; bandLatMax=90.0; bandLatMin=polarCapTop;
+            } else if (lat <= polarCapBottom) {
+                pixelType=2; bandVariab=Fpolar_var; bandPeriod=10.0;
+                brightness=0.98; bandLatMax=polarCapBottom; bandLatMin=-90.0;
+            } else if (nBands > 0) {
+                float zoneHeight  = polarCapTop - polarCapBottom;
+                float sliceHeight = zoneHeight / float(nBands);
+                float relLat      = lat - polarCapBottom;
+                int   sliceIdx    = clamp(int(floor((relLat/zoneHeight)*float(nBands))), 0, nBands-1);
+                float sliceBottom = float(sliceIdx) * sliceHeight;
+                float posInSlice  = (relLat - sliceBottom) / sliceHeight;
+                float margin      = 0.35;
+                if (posInSlice >= margin && posInSlice <= (1.0 - margin)) {
+                    pixelType  = 1;
+                    bandVariab = Fband_var;
+                    bandPeriod = bandPeriods[sliceIdx];
+                    brightness = 1.0;
+                    bandLatMax = polarCapBottom + sliceBottom + (1.0-margin)*sliceHeight;
+                    bandLatMin = polarCapBottom + sliceBottom + margin*sliceHeight;
+                }
+            }
+        }
+
+        // Planetary wave (B bands)
+        if (pixelType == 1) {
+            float wavenumber = float(int(PBAND / bandPeriod + 0.5));
+            brightness += bandVariab * sin(
+                wavenumber * lon * PI / 180.0
+                + 2.0 * PI * time / bandPeriod
+                + bandPhase * PI / 180.0);
+        }
+
+        // Polar pulsation (P bands)
+        if (pixelType == 2) {
+            brightness += bandVariab * sin(
+                2.0 * PI * time / bandPeriod
+                + bandPhase * PI / 180.0);
+        }
+
+        // Vortices
+        if (showVortices && pixelType == 2) {
+            float rStereo   = 2.0 * tan(radians(vortexSize) / 2.0);
+            float vortexLat = bandLatMax > 0.0 ? vortexCenterLat : -vortexCenterLat;
+            int   t_idx     = int(mod(time, 120.0));
+
+            for (int v = 0; v < MAX_V; v++) {
+                if (v >= nVortices) break;
+                float baseLon = equidistantLon(v, time, PROT);
+                vec2  d       = getDrift(v, t_idx);
+                float vLon    = mod(baseLon + d.x + 360.0, 360.0);
+                float vLat    = clamp(vortexLat + d.y, -90.0, 90.0);
+
+                float flux;
+                if (polarDynamic) {
+                    flux = vortexAmp * sin(2.0*PI/bandPeriod*time
+                           + bandPhase*PI/180.0 + getVortexPhase(v));
+                } else {
+                    flux = vortexAmp * sin(2.0*PI/bandPeriod*time
+                           + bandPhase*PI/180.0);
+                }
+
+                if (length(stereo(lat, lon, vLat, vLon)) <= rStereo) {
+                    brightness += flux;
+                }
+            }
+        }
+
+        // Colorlim + limb darkening + colormap
+        brightness    = clamp(brightness, colorMin, colorMax);
+        float bn      = (brightness - colorMin) / (colorMax - colorMin);
+        float mu      = max(dot(normalize(vNormal), normalize(vViewDir)), 0.0);
+        bn            *= 1.0 - 0.3 * (1.0 - mu);
+        vec3  color   = texture2D(colormapTex, vec2(bn, 0.5)).rgb;
+        
+
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+const shaderMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), shaderMaterial);
+scene.add(sphere);
+
+// Initialize textures
+applyAdvancedBands();
+applyAdvancedVortices();
+
+
+// ════════════════════════════════════════════════════════════
+// 9. ADVANCED MODE — BAND TABLE
+// ════════════════════════════════════════════════════════════
+
+function toggleMode() {
+    isAdvancedMode = !isAdvancedMode;
+    document.getElementById('simpleMode').style.display    = isAdvancedMode ? 'none'  : 'block';
+    document.getElementById('advancedMode').style.display  = isAdvancedMode ? 'block' : 'none';
+    document.getElementById('modeToggle').textContent      = isAdvancedMode ? 'Simple Mode' : 'Advanced Mode';
+    uniforms.isAdvancedMode.value = isAdvancedMode;
+    if (isAdvancedMode) {
+        renderBandTable();
+        applyAdvancedBands();
+        renderVortexTable();
+        applyAdvancedVortices();
+    }
+}
+
+function renderBandTable() {
+    const container  = document.getElementById('bandRows');
+    container.innerHTML = '';
+    const inputStyle = `background:#1a1a2e;color:white;border:1px solid #334;
+        border-radius:3px;padding:2px 4px;font-size:11px;width:100%;`;
+
+    advancedBands.forEach((band, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = `display:grid;
+            grid-template-columns:50px 50px 45px 40px 50px 50px 55px 24px;
+            gap:3px;margin-bottom:3px;`;
+        row.innerHTML = `
+            <input type="number" value="${band.latMax}" style="${inputStyle}"
+                onchange="updateBand(${idx},'latMax',parseFloat(this.value))">
+            <input type="number" value="${band.latMin}" style="${inputStyle}"
+                onchange="updateBand(${idx},'latMin',parseFloat(this.value))">
+            <input type="number" value="${band.amp}" step="0.01" style="${inputStyle}"
+                onchange="updateBand(${idx},'amp',parseFloat(this.value))">
+            <select style="${inputStyle}padding:1px;"
+                onchange="updateBand(${idx},'type',this.value)">
+                <option value="B" ${band.type==='B'?'selected':''}>B</option>
+                <option value="P" ${band.type==='P'?'selected':''}>P</option>
+            </select>
+            <input type="number" value="${band.phase}" style="${inputStyle}"
+                onchange="updateBand(${idx},'phase',parseFloat(this.value))">
+            <input type="number" value="${band.period}" step="0.1" style="${inputStyle}"
+                onchange="updateBand(${idx},'period',parseFloat(this.value))">
+            <input type="number" value="${band.variab}" step="0.01" style="${inputStyle}"
+                onchange="updateBand(${idx},'variab',parseFloat(this.value))">
+            <button onclick="removeBand(${idx})" style="background:#400;border:1px solid #f44;
+                border-radius:3px;color:#f44;cursor:pointer;font-size:11px;padding:0;">✕</button>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function updateBand(idx, key, value) {
+    advancedBands[idx][key] = value;
+    applyAdvancedBands();
+}
+function removeBand(idx) {
+    advancedBands.splice(idx, 1);
+    renderBandTable();
+    applyAdvancedBands();
+}
+function addBand() {
+    advancedBands.push({ latMax:0, latMin:-10, amp:1.0, type:'B', phase:0, period:5.0, variab:0.15 });
+    renderBandTable();
+    applyAdvancedBands();
+}
+
+// ════════════════════════════════════════════════════════════
+// 10. ADVANCED MODE — VORTEX TABLE
+// ════════════════════════════════════════════════════════════
+
+function renderVortexTable() {
+    const container  = document.getElementById('vortexRows');
+    container.innerHTML = '';
+    const inputStyle = `background:#1a1a2e;color:white;border:1px solid #334;
+        border-radius:3px;padding:2px 4px;font-size:11px;width:100%;`;
+
+    advancedVortices.forEach((vortex, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = `display:grid;grid-template-columns:30px 80px 24px;
+            gap:3px;margin-bottom:3px;align-items:center;`;
+        row.innerHTML = `
+            <span style="font-size:11px;color:#aaa;">${idx + 1}</span>
+            <input type="number" value="${vortex.phase}" step="0.1" style="${inputStyle}"
+                onchange="updateVortex(${idx},parseFloat(this.value))">
+            <button onclick="removeVortex(${idx})" style="background:#400;border:1px solid #f44;
+                border-radius:3px;color:#f44;cursor:pointer;font-size:11px;padding:0;">✕</button>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function updateVortex(idx, phase) {
+    advancedVortices[idx].phase = phase;
+    applyAdvancedVortices();
+}
+function removeVortex(idx) {
+    advancedVortices.splice(idx, 1);
+    renderVortexTable();
+    applyAdvancedVortices();
+}
+function addVortex() {
+    if (advancedVortices.length >= MAX_VORTICES) return;
+    advancedVortices.push({ phase: 0.0 });
+    renderVortexTable();
+    applyAdvancedVortices();
+}
+
+// ════════════════════════════════════════════════════════════
+// 11. EVENT LISTENERS
+// ════════════════════════════════════════════════════════════
+
+// Simple mode sliders
+document.getElementById('waveAmp').addEventListener('input', e => {
+    waveAmp = parseFloat(e.target.value);
+    uniforms.waveAmp.value = waveAmp;
+    document.getElementById('waveAmpVal').textContent = waveAmp.toFixed(2);
+});
+document.getElementById('polarVar').addEventListener('input', e => {
+    polarVar = parseFloat(e.target.value);
+    uniforms.polarVar.value = polarVar;
+    document.getElementById('polarVarVal').textContent = polarVar.toFixed(2);
+});
+document.getElementById('nBands').addEventListener('input', e => {
+    nBands = parseInt(e.target.value);
+    uniforms.nBands.value = nBands;
+    document.getElementById('nBandsVal').textContent = nBands;
+});
+document.getElementById('nVortice').addEventListener('input', e => {
+    nVortices = parseInt(e.target.value);
+    uniforms.nVortices.value = nVortices;
+    document.getElementById('nVorticeVal').textContent = nVortices;
+});
+document.getElementById('vortexAmp').addEventListener('input', e => {
+    vortexAmp = parseFloat(e.target.value);
+    uniforms.vortexAmp.value = vortexAmp;
+    document.getElementById('vortexAmpVal').textContent = vortexAmp.toFixed(2);
+});
+document.getElementById('vortexSize').addEventListener('input', e => {
+    const val = parseFloat(e.target.value);
+    uniforms.vortexSize.value = val;
+    document.getElementById('vortexSizeVal').textContent = val.toFixed(1);
+});
+document.getElementById('vorticesToggle').addEventListener('change', e => {
+    showVortices = e.target.checked;
+    uniforms.showVortices.value = showVortices;
+    const s = document.getElementById('vorticesState');
+    s.textContent = showVortices ? 'ON' : 'OFF';
+    s.style.color = showVortices ? '#4CAF50' : '#f44336';
+});
+document.getElementById('polarDynamicToggle').addEventListener('change', e => {
+    polarDynamic = e.target.checked;
+    uniforms.polarDynamic.value = polarDynamic;
+    const s = document.getElementById('polarDynamicState');
+    s.textContent = polarDynamic ? 'ON' : 'OFF';
+    s.style.color = polarDynamic ? '#4CAF50' : '#f44336';
+});
+
+// Advanced mode vortex inputs
+document.getElementById('vortexCenterLat').addEventListener('input', e => {
+    uniforms.vortexCenterLat.value = parseFloat(e.target.value);
+});
+document.getElementById('vortexAmpAdv').addEventListener('input', e => {
+    uniforms.vortexAmp.value = parseFloat(e.target.value);
+});
+document.getElementById('vortexSizeAdv').addEventListener('input', e => {
+    uniforms.vortexSize.value = parseFloat(e.target.value);
+});
+document.getElementById('polarDynamicToggleAdv').addEventListener('change', e => {
+    polarDynamic = e.target.checked;
+    uniforms.polarDynamic.value = polarDynamic;
+    const s = document.getElementById('polarDynamicStateAdv');
+    s.textContent = polarDynamic ? 'ON' : 'OFF';
+    s.style.color = polarDynamic ? '#4CAF50' : '#f44336';
+    document.getElementById('polarDynamicToggle').checked = polarDynamic;
+    document.getElementById('polarDynamicState').textContent = polarDynamic ? 'ON' : 'OFF';
+    document.getElementById('polarDynamicState').style.color = polarDynamic ? '#4CAF50' : '#f44336';
+});
+
+// Colormap
+document.getElementById('colormapSelect').addEventListener('change', e => {
+    uniforms.colormapTex.value = generateColormapTexture(e.target.value);
+});
+
+// Light curve update rate
+document.getElementById('lcUpdateRate').addEventListener('input', e => {
+    lcUpdateRate = Math.max(1, parseInt(e.target.value) || 5);
+});
+
+
+// ════════════════════════════════════════════════════════════
+// 12. LIGHT CURVE
+// ════════════════════════════════════════════════════════════
+
+const LC_HISTORY     = 270;
+const lcHistory      = new Array(LC_HISTORY).fill(0);
+let   lcFrameCount   = 0;
+let   lcUpdateRate   = 5;
+const lcRenderTarget = new THREE.WebGLRenderTarget(128, 128);
+const lcPixels       = new Uint8Array(128 * 128 * 4);
+
+function toPython(val) {
+    if (val === true) return 'True';
+    if (val === false) return 'False';
+    if (val === null) return 'None';
+    if (typeof val === 'string') return "'" + val + "'";
+    if (Array.isArray(val)) return '[' + val.map(toPython).join(', ') + ']';
+    if (typeof val === 'object') {
+        const items = Object.entries(val).map(([k, v]) => "'" + k + "': " + toPython(v));
+        return '{' + items.join(', ') + '}';
+    }
+    return String(val);
+}
+
+function computeBrightness() {
+    // Render to offscreen target
+    renderer.setRenderTarget(lcRenderTarget);
+    renderer.render(scene, lcCamera);
+    renderer.setRenderTarget(null);
+    renderer.readRenderTargetPixels(lcRenderTarget, 0, 0, 128, 128, lcPixels);
+
+    // Sum all pixel luminances — straight average, no mu weighting
+    // matching main.py's region_pixels.mean(axis=1)
+    let totalLum   = 0;
+    let totalCount = 0;
+    const cx = 64, cy = 64, R = 60;
+
+    for (let py = 0; py < 128; py++) {
+        for (let px = 0; px < 128; px++) {
+            const dx = px - cx, dy = py - cy;
+            if (Math.sqrt(dx*dx + dy*dy) > R) continue;
+
+            const i   = (py * 128 + px) * 4;
+            const lum = 0.2989*lcPixels[i] + 0.5870*lcPixels[i+1] + 0.1140*lcPixels[i+2];
+
+            totalLum   += lum;
+            totalCount += 1;
+        }
+    }
+
+    return totalCount > 0 ? totalLum / totalCount : 0;
+}
+
+function resetLightCurve() {
+    lcHistory.fill(null);
+    drawLightCurve();
+}
+
+function updateLightCurve() {
+    lcHistory.shift();
+    lcHistory.push(computeBrightness());
+    drawLightCurve();
+}
+
+function drawLightCurve() {
+    const canvas = document.getElementById('lightCurveCanvas');
+    const ctx2d  = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+
+    ctx2d.fillStyle = '#111';
+    ctx2d.fillRect(0, 0, W, H);
+
+    const validData = lcHistory.filter(v => v > 0);
+    if (validData.length < 2) return;
+
+    // Apply main.py's baseline correction: 1 + (flux - mean) / max
+    const mean   = validData.reduce((a, b) => a + b, 0) / validData.length;
+    const maxVal = Math.max(...validData);
+    const corrected = lcHistory.map(v => v > 0 ? 1 + (v - mean) / maxVal : null);
+    
+
+    const validCorrected = corrected.filter(v => v !== null);
+    const minC = Math.min(...validCorrected);
+    const maxC = Math.max(...validCorrected);
+    const range = maxC - minC || 1;
+
+    // Grid lines
+    ctx2d.strokeStyle = '#222';
+    ctx2d.lineWidth   = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = H - (i / 4) * H;
+        ctx2d.beginPath();
+        ctx2d.moveTo(0, y);
+        ctx2d.lineTo(W, y);
+        ctx2d.stroke();
+    }
+
+    // Draw baseline at y=1
+    const baselineY = H - ((1.0 - minC) / range) * (H - 4) - 2;
+    ctx2d.strokeStyle = '#444';
+    ctx2d.lineWidth   = 1;
+    ctx2d.setLineDash([4, 4]);
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, baselineY);
+    ctx2d.lineTo(W, baselineY);
+    ctx2d.stroke();
+    ctx2d.setLineDash([]);
+
+    // Draw curve
+    ctx2d.strokeStyle = '#ffaa00';
+    ctx2d.lineWidth   = 1.5;
+    ctx2d.beginPath();
+    for (let i = 0; i < corrected.length; i++) {
+        if (corrected[i] === null) continue;
+        const x = i;
+        const y = H - ((corrected[i] - minC) / range) * (H - 4) - 2;
+        if (i === 0 || corrected[i-1] === null) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+    }
+    ctx2d.stroke();
+
+    // Amplitude
+    const amplitude = ((maxC - minC) / maxC * 100).toFixed(2);
+    document.getElementById('lcAmplitude').textContent = `Δ = ${amplitude}%`;
+}
+
+
+// ════════════════════════════════════════════════════════════
+// 13. ANIMATION LOOP
+// ════════════════════════════════════════════════════════════
+
+let t = 0;
+let specFrameCount = 0;
+const SPEC_UPDATE_RATE = 24;
+let specAutoUpdate = false;
+
+function animate() {
+    requestAnimationFrame(animate);
+    t += 0.02;
+    uniforms.time.value = t;
+    sphere.rotation.y  += 0.005;
+    renderer.render(scene, camera);
+
+    lcFrameCount++;
+    if (lcFrameCount % lcUpdateRate === 0) updateLightCurve();
+
+    if (specAutoUpdate) {
+        specFrameCount++;
+        if (specFrameCount % SPEC_UPDATE_RATE === 0) computeCompositeSpectrum();
+    }
+}
+animate();
+
+// ════════════════════════════════════════════════════════════
+// 14. EXPORT PANEL
+// ════════════════════════════════════════════════════════════
+
+let selectedSimPreset  = null;
+let selectedCloudPreset = null;
+
+// ── Simulation presets ────────────────────────────────────────
+
+const SIM_PRESETS = {
+    default: {
+        label: 'Default Brown Dwarf',
+        description: 'Standard brown dwarf with 4 equatorial bands, 5 polar vortices, polarStatic modulation. Good starting point for most simulations.',
+        modu_config: 'polarStatic',
+        amp_config: {
+            Prot: 5, Fpolar: 0.98, Fband: 1.0, Fambient: 1.0,
+            Fpolar_var: 0.05, Fband_var: 0.15, Fambient_var: 0.0
+        },
+        band_config_array: [
+            [90, 65, 0.98, 'P', 0, 60, 5, 0.05],
+            [15, 5, 1.0,  'B', 0, 2.5, 5, 0.15],
+            [-5, -15, 1.0, 'B', 0, 2.5, 5, 0.15],
+            [-65, -90, 0.98, 'P', 0, 60, 5, 0.05],
+        ],
+        vortex_config: [5, 0.0075, true, 80, 0.15],
+    },
+    active: {
+        label: 'Active Vortices',
+        description: 'High vortex amplitude with polarDynamic modulation — each vortex pulses independently. Best for studying vortex-driven variability.',
+        modu_config: 'polarDynamic',
+        amp_config: {
+            Prot: 5, Fpolar: 0.98, Fband: 1.0, Fambient: 1.0,
+            Fpolar_var: 0.2, Fband_var: 0.15, Fambient_var: 0.0
+        },
+        band_config_array: [
+            [90, 65, 0.98, 'P', 0, 60, 5, 0.2],
+            [17, 10, 1.0,  'B', 0, 2.5, 5, 0.15],
+            [8,  2,  1.0,  'B', 0, 2.5, 5, 0.15],
+            [-2, -8, 1.0,  'B', 0, 2.5, 5, 0.15],
+            [-10, -17, 1.0, 'B', 0, 3.0, 5, 0.15],
+            [-65, -90, 0.98, 'P', 0, 60, 5, 0.2],
+        ],
+        vortex_config: [5, 0.0075, true, 80, 0.4],
+    },
+    quiet: {
+        label: 'Quiet Atmosphere',
+        description: 'Minimal variability, no vortices. Useful as a baseline comparison or for studying band-only signals.',
+        modu_config: 'polarStatic',
+        amp_config: {
+            Prot: 5, Fpolar: 0.98, Fband: 1.0, Fambient: 1.0,
+            Fpolar_var: 0.01, Fband_var: 0.03, Fambient_var: 0.0
+        },
+        band_config_array: [
+            [90, 65, 0.98, 'P', 0, 60, 5, 0.01],
+            [17, 10, 1.0,  'B', 0, 2.5, 5, 0.03],
+            [-10, -17, 1.0, 'B', 0, 3.0, 5, 0.03],
+            [-65, -90, 0.98, 'P', 0, 60, 5, 0.01],
+        ],
+        vortex_config: false,
+    },
+};
+
+// ── Cloud presets ─────────────────────────────────────────────
+
+const CLOUD_PRESETS = {
+    clearsky: {
+        label: 'Clear Sky',
+        description: 'No cloud deck. Pure gas opacity only. Best for testing the baseline spectral shape without cloud effects.',
+        spec_folder: 'clearsky',
+        download_url: 'https://raw.githubusercontent.com/YOURUSERNAME/YOURREPO/main/spectra/clearsky_config.json',
+        picaso_params: {
+            clouds: false,
+            T_eff: 1200, log_g: 4.5,
+            metallicity: 1.0, CtoO: 0.55,
+        },
+        codec_params: { n: 11 },
+    },
+    thin: {
+        label: 'Thin Clouds',
+        description: 'High sedimentation efficiency (fsed=8) — thin, high-altitude cloud deck. Moderate effect on NIR flux.',
+        spec_folder: 'thin_clouds_fsed8',
+        download_url: 'https://raw.githubusercontent.com/YOURUSERNAME/YOURREPO/main/spectra/clearsky_config.json',
+        picaso_params: {
+            clouds: true, fsed: 8, Kzz: 1e8,
+            condensates: ['MgSiO3', 'Fe'],
+            T_eff: 1200, log_g: 4.5,
+            metallicity: 1.0, CtoO: 0.55,
+        },
+        codec_params: { n: 11 },
+    },
+    thick: {
+        label: 'Thick Clouds',
+        description: 'Low sedimentation efficiency (fsed=2) — thick cloud deck with strong NIR suppression. Significant flux redistribution.',
+        spec_folder: 'thick_clouds_fsed2',
+        download_url: 'https://raw.githubusercontent.com/YOURUSERNAME/YOURREPO/main/spectra/clearsky_config.json',
+        picaso_params: {
+            clouds: true, fsed: 2, Kzz: 1e8,
+            condensates: ['MgSiO3', 'Fe'],
+            T_eff: 1200, log_g: 4.5,
+            metallicity: 1.0, CtoO: 0.55,
+        },
+        codec_params: { n: 11 },
+    },
+    iron: {
+        label: 'Iron Clouds',
+        description: 'Iron and silicate condensates (MgSiO₃ + Fe). Produces strong opacity in J and H bands. Relevant for T/L transition objects.',
+        spec_folder: 'iron_clouds_mgsio3_fe',
+        download_url: 'https://raw.githubusercontent.com/YOURUSERNAME/YOURREPO/main/spectra/clearsky_config.json',
+        picaso_params: {
+            clouds: true, fsed: 4, Kzz: 1e8,
+            condensates: ['MgSiO3', 'Fe', 'Na2S'],
+            T_eff: 1200, log_g: 4.5,
+            metallicity: 1.0, CtoO: 0.55,
+        },
+        codec_params: { n: 11 },
+    },
+};
+
+// ── Preset selection ──────────────────────────────────────────
+
+function selectSimPreset(id) {
+    selectedSimPreset = id;
+
+    // Highlight selected
+    document.querySelectorAll('[id^="simBtn_"]').forEach(btn => {
+        btn.style.borderColor = '#334';
+        btn.style.color = '#ccc';
+    });
+    document.getElementById(`simBtn_${id}`).style.borderColor = '#88ccff';
+    document.getElementById(`simBtn_${id}`).style.color = 'white';
+
+    // Show description
+    const desc = document.getElementById('simPresetDesc');
+    desc.style.display = 'block';
+    if (id === 'current') {
+        desc.innerHTML = `<strong style="color:white;">Current GUI Settings</strong><br>
+            Exports exactly what you see in the simulator right now —
+            ${advancedBands.length} bands, ${advancedVortices.length} vortices,
+            ${polarDynamic ? 'polarDynamic' : 'polarStatic'} mode.`;
+    } else {
+        const p = SIM_PRESETS[id];
+        desc.innerHTML = `<strong style="color:white;">${p.label}</strong><br>${p.description}`;
+    }
+}
+
+function selectCloudPreset(id) {
+    selectedCloudPreset = id;
+
+    // Highlight selected
+    document.querySelectorAll('[id^="cloudBtn_"]').forEach(btn => {
+        btn.style.borderColor = '#334';
+        btn.style.color = '#ccc';
+    });
+    document.getElementById(`cloudBtn_${id}`).style.borderColor = '#88ccff';
+    document.getElementById(`cloudBtn_${id}`).style.color = 'white';
+
+    // Show description
+    const p = CLOUD_PRESETS[id];
+    const desc = document.getElementById('cloudPresetDesc');
+    desc.style.display = 'block';
+    desc.innerHTML = `<strong style="color:white;">${p.label}</strong><br>
+        ${p.description}<br>
+        <span style="color:#666;">spec_folder: ${p.spec_folder}</span>`;
+
+    document.getElementById('exportCloudBtn').disabled = false;
+}
+
+// ── Build simulation config from current GUI state ────────────
+
+function buildCurrentSimConfig() {
+    // Convert advancedBands to main.py band_config_array format:
+    // [lat2, lat1, amp, type, phase, period, planet_period, variab]
+    const band_config_array = advancedBands.map(b => [
+        b.latMax,
+        b.latMin,
+        b.amp,
+        b.type,
+        b.phase,
+        b.period,
+        uniforms.vortexCenterLat ? uniforms.vortexCenterLat.value : 5,
+        b.variab,
+    ]);
+
+    const amp_config = {
+        Prot:         5,
+        Fpolar:       0.98,
+        Fband:        1.0,
+        Fambient:     1.0,
+        Fpolar_var:   polarVar,
+        Fband_var:    waveAmp,
+        Fambient_var: 0.0,
+    };
+
+    const vortex_config = showVortices
+        ? [nVortices, 0.0075, true,
+           uniforms.vortexCenterLat.value, vortexAmp / 10]
+        : false;
+
+    return {
+        amp_config,
+        band_config_array,
+        vortex_config,
+        modu_config: polarDynamic ? 'polarDynamic' : 'polarStatic',
+    };
+}
+
+// ── Export functions ──────────────────────────────────────────
+
+
+// --- Export Panel Toggle ------------------------------
+
+function toggleExportPanel() {
+    const panel = document.getElementById('exportPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+// CODEC / COMPOSITE SPECTRUM ------------------------
+
+const SPECTRA_BASE_URL = 'spec_module/bd_grid_noCH4_n=50_20260322_193125/';
+const N_BINS           = 50;
+const FSED_MIN         = 1.0;
+const FSED_MAX         = 1.196;
+const BRIGHT_MIN       = 0.95;   // brightness → fsed_min (thickest clouds)
+const BRIGHT_MAX       = 1.05;   // brightness → fsed_max (thinnest clouds)
+ 
+// High-res render target for spectrum computation (1024x1024)
+const specRenderTarget = new THREE.WebGLRenderTarget(1024, 1024);
+const specPixels       = new Uint8Array(1024 * 1024 * 4);
+ 
+// Cache fetched spectra so we don't re-fetch on every compute
+const spectraCache = {};
+ 
+function getFsedFilename(binIndex) {
+    const fsed = FSED_MIN + binIndex * (FSED_MAX - FSED_MIN) / (N_BINS - 1);
+    const fsedStr = fsed.toFixed(4);
+    return `spec_1200_10000_1.0000E+07_${fsedStr}_cloudy.csv`;
+}
+ 
+async function fetchSpectrum(binIndex) {
+    if (spectraCache[binIndex]) return spectraCache[binIndex];
+    const filename = getFsedFilename(binIndex);
+    const url = SPECTRA_BASE_URL + filename;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Failed to fetch ${filename}`);
+    const text = await resp.text();
+    const lines = text.trim().split('\n').slice(1); // skip header
+    const wavelengths = [], fluxes = [];
+    for (const line of lines) {
+        const parts = line.trim().split(/[\s,]+/);
+        if (parts.length >= 2) {
+            wavelengths.push(parseFloat(parts[0]));
+            fluxes.push(parseFloat(parts[1]));
+        }
+    }
+    spectraCache[binIndex] = { wavelengths, fluxes };
+    return spectraCache[binIndex];
+}
+ 
+function computeBinFractions() {
+    // Render at 1024x1024 using fixed lcCamera
+    renderer.setRenderTarget(specRenderTarget);
+    renderer.render(scene, lcCamera);
+    renderer.readRenderTargetPixels(specRenderTarget, 0, 0, 1024, 1024, specPixels);
+    renderer.setRenderTarget(null);
+ 
+    const cx = 512, cy = 512, R = 490;
+    const counts = new Float64Array(N_BINS);
+    let total = 0;
+ 
+    for (let py = 0; py < 1024; py++) {
+        for (let px = 0; px < 1024; px++) {
+            const dx = px - cx, dy = py - cy;
+            if (dx*dx + dy*dy > R*R) continue;
+ 
+            const idx = (py * 1024 + px) * 4;
+            // Convert RGB back to approximate brightness via luminance
+            const r = specPixels[idx]   / 255;
+            const g = specPixels[idx+1] / 255;
+            const b = specPixels[idx+2] / 255;
+            const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+ 
+            // Limb darkening weight: mu = cos(angle from center)
+            const dist = Math.sqrt(dx*dx + dy*dy) / R;
+            const mu   = Math.sqrt(Math.max(0, 1 - dist*dist));
+            const weight = mu; // same weighting as main.py
+ 
+            // Map luminance → bin index
+            const t   = (lum - 0) / 1.0; // lum is 0-1
+            // Remap through brightness range to bin
+            const bNorm = Math.max(0, Math.min(1, (t - (BRIGHT_MIN / (uniforms.colorMin.value - uniforms.colorMax.value + BRIGHT_MIN)))));
+            const bin  = Math.min(N_BINS - 1, Math.max(0, Math.floor(bNorm * N_BINS)));
+ 
+            counts[bin] += weight;
+            total += weight;
+        }
+    }
+ 
+    // Normalize to fractions
+    const fractions = new Float64Array(N_BINS);
+    if (total > 0) {
+        for (let i = 0; i < N_BINS; i++) fractions[i] = counts[i] / total;
+    }
+    return fractions;
+}
+ 
+function drawSpectrum(wavelengths, fluxes, individualSpectra) {
+    const canvas = document.getElementById('spectrumCanvas');
+    const ctx    = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const pad = { top: 10, right: 10, bottom: 28, left: 48 };
+ 
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, W, H);
+ 
+    const wMin = Math.min(...wavelengths), wMax = Math.max(...wavelengths);
+    //const fMin = Math.min(...fluxes),      fMax = Math.max(...fluxes);
+    const allFluxes = individualSpectra && individualSpectra.length > 0 ? individualSpectra.filter(s => s && s.fluxes).flatMap(s => s.fluxes) : fluxes;
+    const fMin = Math.min(...allFluxes), fMax = Math.max(...allFluxes)
+    const wRange = wMax - wMin, fRange = fMax - fMin || 1;
+ 
+    const toX = w => pad.left + (w - wMin) / wRange * (W - pad.left - pad.right);
+    const toY = f => H - pad.bottom - (f - fMin) / fRange * (H - pad.top - pad.bottom);
+ 
+    // Grid
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = pad.top + i / 4 * (H - pad.top - pad.bottom);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    }
+ 
+    // Axes labels
+    ctx.fillStyle = '#555'; ctx.font = '9px Arial'; ctx.textAlign = 'center';
+    ctx.fillText('Wavelength (μm)', W / 2, H - 4);
+    ctx.save(); ctx.translate(10, H / 2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('Flux', 0, 0); ctx.restore();
+ 
+    // Tick labels
+    ctx.fillStyle = '#444'; ctx.font = '8px Arial';
+    for (let i = 0; i <= 4; i++) {
+        const w = wMin + i / 4 * wRange;
+        ctx.textAlign = 'center';
+        ctx.fillText(w.toFixed(1), toX(w), H - pad.bottom + 10);
+    }
+
+    // Individual spectra
+    if (individualSpectra && individualSpectra.length > 0) {
+        const validSpectra = individualSpectra.filter(s => s && s.fluxes && s.fluxes.length > 0);
+        if (validSpectra.length === 0) return;
+        const fMin = Math.min(...validSpectra.map(s => Math.min(...s.fluxes)));
+        const fMax = Math.max(...validSpectra.map(s => Math.max(...s.fluxes)));
+        for (let s = 0; s < validSpectra.length; s++) {
+            const t = s / (validSpectra.length - 1);
+            const r = Math.round(100 + t * 100);
+            const b = Math.round(200 - t * 150);
+            ctx.strokeStyle = `rgba(${r},80,${b},0.25)`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            const iFluxes = validSpectra[s].fluxes;
+            const iWaves = validSpectra[s].wavelengths;
+            for (let i = 0; i < iWaves.length; i++) {
+                const x = toX(iWaves[i]);
+                const y = H - pad.bottom - (iFluxes[i] - fMin) / (fMax - fMin || 1) * (H - pad.top - pad.bottom);
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); 
+            }
+            ctx.stroke();
+        }
+    }
+ 
+    // Spectrum curve
+    //ctx.strokeStyle = '#44aaff'; ctx.lineWidth = 1.5;
+    //ctx.beginPath();
+    //for (let i = 0; i < wavelengths.length; i++) {
+        //const x = toX(wavelengths[i]), y = toY(fluxes[i]);
+        //i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    //ctx.stroke();
+//}
+ 
+async function computeCompositeSpectrum() {
+    const btn    = document.getElementById('computeSpecBtn');
+    const status = document.getElementById('spectrumStatus');
+    btn.disabled = true;
+    btn.textContent = 'Computing...';
+    status.textContent = 'Rendering scene...';
+ 
+    try {
+        const fractions = computeBinFractions();
+ 
+        // Find bins with meaningful contribution
+        //const threshold = 0.001;
+        const activeBins = Array.from({length: N_BINS}, (_, i) => i);
+        status.textContent = 'Fetching spectra...';
+        // for (let i = 0; i < N_BINS; i++) {
+        //     if (fractions[i] > threshold) activeBins.push(i);
+        // }
+ 
+        // status.textContent = `Fetching ${activeBins.length} spectra...`;
+ 
+        // Fetch only active bins
+        const spectra = await Promise.all(activeBins.map(i => fetchSpectrum(i)));
+ 
+        status.textContent = 'Computing composite...';
+ 
+        // Use wavelength grid from first spectrum
+        const wavelengths = spectra[0].wavelengths;
+        const composite   = new Float64Array(wavelengths.length);
+ 
+        for (let s = 0; s < activeBins.length; s++) {
+            const frac = fractions[activeBins[s]];
+            const flux = spectra[s].fluxes;
+            for (let w = 0; w < wavelengths.length; w++) {
+                composite[w] += frac * flux[w];
+            }
+        }
+ 
+        drawSpectrum(wavelengths, Array.from(composite), spectra);
+        //status.textContent = `Done — ${activeBins.length} bins used`;
+        specAutoUpdate = true;
+    } catch (err) {
+        status.textContent = `Error: ${err.message}`;
+        console.error(err);
+    }
+ 
+    btn.disabled = false;
+    btn.textContent = 'Compute';
+}
+
+
+function exportSimConfig() {
+    if (!selectedSimPreset) {
+        alert('Please select a simulation preset first.');
+        return;
+    }
+
+    const t0         = parseFloat(document.getElementById('simT0').value);
+    const t1         = parseFloat(document.getElementById('simT1').value);
+    const frames     = parseInt(document.getElementById('simFrames').value);
+    const option     = 'full';
+    const inclStr    = document.getElementById('simInclinations').value;
+    const inclinations = inclStr.split(',').map(s => parseFloat(s.trim())).filter(v => !isNaN(v));
+
+    let band_config_array, amp_config, modu_config, vortex_config, phase_values;
+
+    if (selectedSimPreset === 'current') {
+        const cfg      = buildCurrentSimConfig();
+        band_config_array = cfg.band_config_array;
+        amp_config     = cfg.amp_config;
+        modu_config    = cfg.modu_config;
+        vortex_config  = cfg.vortex_config;
+        phase_values   = polarDynamic ? advancedVortices.map(v => v.phase) : null;
+    } else {
+        const p        = SIM_PRESETS[selectedSimPreset];
+        band_config_array = p.band_config_array;
+        amp_config     = p.amp_config;
+        modu_config    = p.modu_config;
+        vortex_config  = p.vortex_config;
+        phase_values   = null;
+    }
+
+    const bandStr    = '[\n' + band_config_array.map(row => '    ' + toPython(row) + ',').join('\n') + '\n]';
+    const ampStr     = toPython(amp_config, null, 4)
+        .replace(/\n/g, '\n    ');
+    const vortexStr  = vortex_config === false
+        ? 'False'
+        : toPython(vortex_config);
+    const phaseStr   = phase_values
+        ? toPython(phase_values)
+        : 'None';
+    const inclStr2   = toPython(inclinations);
+
+    const script = `#!/usr/bin/env python3
+"""
+Brown Dwarf Simulation Script
+Generated by Brown Dwarf Simulator GUI
+Date: ${new Date().toISOString()}
+Preset: ${selectedSimPreset}
+
+Usage:
+    python run_simulation.py
+
+Requirements:
+    pip install numpy pyvista vtk h5py matplotlib
+"""
+
+import sys
+import os
+
+from main import renderer
+
+# ── Adjust this path to point to your main.py location ───────
+SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR  = os.path.join(SCRIPT_DIR, 'output')
+
+# ── Simulation settings ───────────────────────────────────────
+RUN_NAME = '${selectedSimPreset}_simulation'
+
+sim_config = {
+    'modu_config':      '${modu_config}',
+    'inclinations':     ${inclStr2},
+    'mesh_resolution':  400,
+    'plot_paths':       False,
+    'plot_lc':          True,
+}
+
+# ── Band configuration ────────────────────────────────────────
+# Format: [lat2, lat1, amplitude, type, phase, period, planet_period, variab]
+amp_config = ${ampStr}
+
+band_config_array = ${bandStr}
+
+band_config = [amp_config, band_config_array]
+
+# ── Time configuration ────────────────────────────────────────
+# [t0, t1, frames, option]  — option: 'full', 'jwst', 'sparse'
+time_config = [${t0}, ${t1}, ${frames}, 'full']
+t0 = time_config[0]
+t1 = time_config[1]
+frames = time_config[2]
+option = time_config[3]
+
+# ── Vortex configuration ──────────────────────────────────────
+# [n_vortice, radius_frac, drift, centerLat, ampVortex]
+# Set to False to disable vortices entirely
+vortex_config = ${vortexStr}
+
+# ── Phase values (polarDynamic mode only) ─────────────────────
+phase_values = ${phaseStr}
+
+# ── Run ───────────────────────────────────────────────────────
+if __name__ == '__main__':
+    print(f"Starting simulation: " + RUN_NAME)
+    print(f"Inclinations: {sim_config['inclinations']}")
+    print(f"Time: {time_config[0]} to {time_config[1]} hours, {frames} frames, {option} mode")
+    print(f"Vortices: {vortex_config}")
+    print()
+
+    renderer(
+        runName=RUN_NAME,
+        sim_config=sim_config,
+        band_config=band_config,
+        time_config=time_config,
+        vortex_config=vortex_config,
+        phase_values=phase_values,
+    )
+    
+    with open(os.path.join(SCRIPT_DIR, '.last_run'), 'w') as f:
+        f.write(RUN_NAME)
+
+    print(f"\\nDone! Results saved to output/{RUN_NAME}/")
+`;
+
+    downloadFile(script, 'run_simulation.py', 'text/plain');
+}
+
+function exportCloudConfig() {
+    if (!selectedCloudPreset) return;
+    const p = CLOUD_PRESETS[selectedCloudPreset];
+
+    const picasoStr  = JSON.stringify(p.picaso_params, null, 4)
+        .replace(/\n/g, '\n    ');
+
+    const script = `#!/usr/bin/env python3
+"""
+Brown Dwarf Spectral Analysis Script
+Generated by Brown Dwarf Simulator GUI
+Date: ${new Date().toISOString()}
+Cloud preset: ${p.label}
+
+Usage:
+    1. First run run_simulation.py to generate the HDF5 file
+    2. Then run this script:
+       python run_codec.py
+
+Requirements:
+    pip install numpy h5py matplotlib scipy
+"""
+
+import sys
+import os
+
+# ── Adjust these paths to match your directory structure ──────
+
+SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+H5_DIR      = os.path.join(SCRIPT_DIR, 'output')
+SPEC_PATH   = os.path.join(SCRIPT_DIR, 'spec_module')
+
+last_run_file = os.path.join(SCRIPT_DIR, '.last_run')
+if os.path.exists(last_run_file):
+    with open(last_run_file) as f:
+        RUN_NAME = f.read().strip()
+    H5_FILE = f'{RUN_NAME}.h5'
+    H5_DIR  = os.path.join(SCRIPT_DIR, 'output', RUN_NAME)
+    print(f"Auto-detected simulation: {H5_FILE}")
+else:
+    RUN_NAME = 'my_simulation'
+    H5_FILE  = f'{RUN_NAME}.h5'
+    H5_DIR   = os.path.join(SCRIPT_DIR, 'output', RUN_NAME)
+    print(f"No previous run detected, using: {H5_FILE}")
+
+# ── Cloud configuration ───────────────────────────────────────
+# Preset: ${p.label}
+# ${p.description}
+SPEC_FOLDER = '${p.spec_folder}'
+N_BINS      = ${p.codec_params.n}   # number of cloud thickness levels
+
+# PICASO parameters used to generate this spectral grid:
+PICASO_PARAMS = ${picasoStr}
+
+# ── Run ───────────────────────────────────────────────────────
+if __name__ == '__main__':
+    print(f"Starting spectral analysis")
+    print(f"HDF5 file:    {H5_DIR}/{H5_FILE}")
+    print(f"Spec folder:  {SPEC_PATH}/{SPEC_FOLDER}")
+    print(f"Cloud preset: ${p.label}")
+    print()
+
+    runner = CodecRunner(
+        h5_file=H5_FILE,
+        h5_dir=H5_DIR,
+        spec_path=SPEC_PATH,
+    )
+
+    # Step 1: Load simulation data and assign spectra
+    encoded = runner.encode_spectra(
+        spec_config='${selectedCloudPreset}',
+        spec_folder=SPEC_FOLDER,
+        n=N_BINS,
+    )
+
+    results = encoded['results']
+    codec   = encoded['codec']
+    runpath = encoded['runpath']
+
+    # Step 2: Process all inclinations
+    print(f"\\nProcessing inclinations: {list(results.keys())}")
+    for inclin in results.keys():
+        print(f"  Processing inclination {inclin}...")
+        runner.process_time_series(results, codec, runpath, inclin, N_BINS)
+
+    print(f"\\nDone! Results saved to {runpath}/")
+    print("Output files:")
+    print("  codec_images_i=*.h5       — codec composite images")
+    print("  composite_spectra_i=*.h5  — composite spectra time series")
+`;
+
+    downloadFile(script, 'run_codec.py', 'text/plain');
+}
+
+// Replace downloadJSON with this more general version
+function downloadFile(content, filename, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+
+</script>
+</body>
+</html>

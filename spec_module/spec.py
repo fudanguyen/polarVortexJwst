@@ -50,25 +50,6 @@ def configure_atm(C_to_O=0.55, mh=1.0, Teff=1200, gravity=10000,
     return bd, opa, profile
 
 # ===========================================================================
-def convert_and_regrid(df, R=500):
-    """Convert spectrum to different units and regrid."""
-    x, y = df['wavenumber'], df['thermal']
-    xmicron = 1e4/x
-    flamy = y*1e-8
-    sp = jdi.psyn.ArraySpectrum(xmicron, flamy, waveunits='um', fluxunits='FLAM')
-    sp.convert("um")
-    sp.convert('Fnu')
-    
-    x = sp.wave
-    y = sp.flux
-    df['fluxnu'] = y
-    x, y = jdi.mean_regrid(x, y, R=R)
-    df['regridy'] = y
-    df['regridx'] = x
-    
-    return df
-
-# ===========================================================================
 def configure_cloud(df, profile, opacity, mh=1, mmw=2.2, fsed=1, R=300,
                     gases=['Fe', 'MgSiO3', 'Mg2SiO4', 'Al2O3']):
     """Configure clouds in atmosphere."""
@@ -90,9 +71,8 @@ def configure_cloud(df, profile, opacity, mh=1, mmw=2.2, fsed=1, R=300,
     
     cld_out = df.virga(gases, virga_directory, fsed=fsed, mmw=mmw)
     df_out = df.spectrum(opacity, full_output=True)
-    df_out = convert_and_regrid(df_out, R=R)
-    
-    return df_out['regridx'], df_out['regridy'], cld_out, df_out
+
+    return cld_out, df_out
 
 def _fsed_to_str(fsed):
     """Return a filename-safe string for either a float or per-species dict fsed."""
@@ -135,26 +115,25 @@ def run_single_model(params):
             # Run cloud-free spectrum
             print("Running cloud-free model ONLY")
             clf = bd.spectrum(opa, full_output=True)
-            clf = convert_and_regrid(clf, R=cloud_params['R'])
             
             # Create descriptive filename for cloud-free model
             # Format: bd_[Teff]_[gravity]_[kzz]_cloudfree.nc
             filename = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.1E}_cloudfree.nc"
             specname = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.3E}_cloudfree.csv"
-            wave, thermal = clf['regridx'], clf['regridy']
-
+            wavenumber, thermal = jdi.mean_regrid(clf['wavenumber'], clf['thermal'], R=cloud_params['R']) # units of micron, erg/cm2/s/Hz
+            wavelength_um = 1e4 / wavenumber  # convert wavenumber to wavelength in microns
+        
             # Add to result AFTER creating the file
             result.update({
                 'model_id': filename[:-3],  # Remove .nc for model_id
-                'specfile': clf,
-                'wave': wave,
-                'thermal': thermal
+                'wavelength': wavelength_um, # Convert wavenumber to wavelength in microns
+                'thermal': thermal,  # Flam to results for cloud-free model
             })
         else: 
             # Run cloudy spectrum 
             print("Running cloudy model ONLY")
             
-            x_cldy, y_cldy, cld_out, df_out = configure_cloud(
+            cld_out, df_out = configure_cloud(
                 bd, profile, opa, 
                 mh=cloud_params['mh'],
                 mmw=cloud_params['mmw'],
@@ -169,24 +148,28 @@ def run_single_model(params):
             filename  = f"bd_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.4E}_{_fsed_str}_cloudy.nc"
             specname  = f"spec_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.4E}_{_fsed_str}_cloudy.csv"
             virganame = f"virga_{atm_params['Teff']:.0f}_{atm_params['gravity']:.0f}_{atm_params['kzz']:.4E}_{_fsed_str}_cloudy.pkl"
-            wave, thermal = x_cldy, y_cldy
-
+            wavenumber, thermal = jdi.mean_regrid(df_out['wavenumber'], df_out['thermal'], R=cloud_params['R']) # units of micron, erg/cm2/s/Hz
+            wavelength_um = 1e4 / wavenumber  # convert wavenumber to wavelength in microns 
+           
             # Add to result AFTER creating the file
             result.update({
                 'model_id': filename[:-3],  # Remove .nc for model_id
-                'specfile': cld_out,
-                'wave': x_cldy,
-                'thermal': y_cldy
+                'cloud_optics': cld_out,
+                'wavelength': wavelength_um,
+                'thermal': thermal, # Flam in erg/cm2/s/cm
             })
+
+        # After the if/else block, resolve which output object to use:
+        spectrum_output = clf if cloudfree else df_out
 
         # output spectra
         spec_file = os.path.join(output_dir, specname)
-        np.savetxt(spec_file, np.column_stack((wave, thermal)), delimiter=",", header="wavelength_um, flux_erg/cm2/s/hz", comments="")
+        np.savetxt(spec_file, np.column_stack((wavelength_um, thermal)), delimiter=",", header="wavelength_um, flux_erg/cm2/s/cm", comments="")
 
         # output .nc model file
         model_file = os.path.join(output_dir, filename)
-        jdi.output_xarray(df_out, bd, savefile=model_file)
-
+        jdi.output_xarray(spectrum_output, bd, savefile=model_file)
+        
         # bundle cloud_optics as .pkl file
         if not cloudfree:
             results_file = os.path.join(output_dir, virganame)
@@ -347,7 +330,7 @@ def create_parameter_grid(
     gravity_list=[10000],
     kzz_list=[1e7],
     phase_list=[0],
-    wave_range_list=[[1, 6]],
+    wave_range_list=[[1, 10]],
     eq_list=[False],
     excluded_mol_list=[None],
     mmw_list=[2.2],
@@ -562,16 +545,23 @@ if __name__ == "__main__":
     # )
     
     ### Simple 3 clouds
-    runnerName = 'bd_grid_noCH4_n=50'
-    mode = 'simple'
-    # mode = 'complex'
+    # runnerName = 'bd_grid_noCH4_n=50_R=300'
+    # runnerName = 'bd_grid_withCH4_n=50_R=300'
+    runnerName = 'bd_grid_complex_noCH4_n=50_R=300'
+
+    R = int(runnerName.split('_R=')[-1])
+    if 'complex' in runnerName:
+        mode = 'complex'
+    else:
+        mode = 'simple'
     gases = ['Fe', 'MgSiO3', 'Na2S']
     fsed_list = [] # Will be generated by generate_fsed() based on the mode and parameters below
-    # n_levels = 20
-    n_levels = 50
+    n_levels = int(runnerName.split('_n=')[-1].split('_')[0])
+
+    excluded_mol = 'CH4' if 'noCH4' in runnerName else None
 
     if mode == 'simple':
-        # ── Option A: simple (replaces the manual sorted(set(...)) block) ──────────
+        # ── Option A: simple (repl  aces the manual sorted(set(...)) block) ──────────
         fsed_list = generate_fsed(
             mode='simple',
             start=1.0,
@@ -582,7 +572,7 @@ if __name__ == "__main__":
 
     elif mode == 'complex':
         # ── Option B: complex (per-species, mixed direction) ───────────────────────
-        iterationName = "complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]"
+        iterationName = "fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]"
         runnerName = f"{runnerName}_{iterationName}"
 
         fsed_list = generate_fsed(
@@ -600,11 +590,11 @@ if __name__ == "__main__":
     param_grid = create_parameter_grid(
         Teff_list=[1200], # 
         C_to_O_list=[0.],
-        wave_range_list=[[1, 6]],
-        R_list=[700], # Spectral resolution for regridding the output spectrum
-        gravity_list=[10000], # gravity in unit of m/s^2
+        wave_range_list=[[0.3, 10.0]], # wavelength range in microns 
+        R_list=[R], # Spectral resolution for regridding the output spectrum
+        gravity_list=[20000], # gravity in unit of cm/s^2
         fsed_list=fsed_list, # the range of fsed values to run (either in simple mode (same or all gases) or complex mode (per-species))
-        excluded_mol_list=['CH4'], # gas to exclude from the atmosphere (e.g. to test its impact on the spectrum)
+        excluded_mol_list=[excluded_mol], # gas to exclude from the atmosphere (e.g. to test its impact on the spectrum)
         gases_list=[['Fe', 'MgSiO3', 'Na2S']],
         kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only
@@ -632,48 +622,66 @@ if __name__ == "__main__":
     from picaso import justplotit as jpi
     import xarray 
 
-    ## Plot all spectra from results
-    plt.figure(figsize=(12, 6), dpi=300)
-    for model in results:
-        model_id = model['model_id']
-        x = model['wave']
-        y = model['thermal']
-        plt.plot(x, y, label=model_id)
-
-    plt.xlabel("Wavelength (µm)")
-    plt.ylabel("Flux (erg/cm²/s/Hz)")
-    plt.title("Spectra from Results")
-    # plt.yscale('log')
-    plt.legend(fontsize='small')
-    plt.grid()
-    plt.tight_layout()
-    plt.show()
-
     ## Plot virga cloud optics
     from bokeh.plotting import show, figure
     from bokeh.io import output_notebook 
     output_notebook()
 
-    for model in results[:2]:  # Plot first 2 models only
-        virgadf = model['specfile']
-        print(f"\nPlotting model: {model['model_id']}, fsed={model['params']['fsed']}")
-        p = show(vjpi.all_optics(virgadf))
+    # ## Plot two spectra from results on the same plot for comparison
+    # model = results[0]
+    # model_id = model['model_id']
+    # ### compare with matplotlib plotting instead of bokeh
+    # plt.figure(figsize=(10, 5))
+    # plt.plot(model['wavelength'], model['thermal'], label=f"Model 1: {model['params']['fsed']}")
+    # plt.xlabel('Wavelength (micron)')
+    # plt.ylabel('Flux (erg/s/cm^2/cm)')
+    # plt.title('Comparison of Spectra from Two Models')
+    # plt.yscale('linear')
+    # plt.legend()
+    # plt.grid()
+    # plt.show()
 
-    ## Load a specific model file, reload and reuse
-    nc_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith('.nc')]
-    model_file = nc_files[0]
-    ds = xarray.load_dataset(model_file)
-    print(f"Dataset dimensions: {ds.dims}")
-    print(f"Available variables: {list(ds.data_vars)}")
-    opa_reload = jdi.opannection(wave_range=[1, 10])
-    reuse = jdi.input_xarray(ds, opa_reload, calculation='browndwarf')
-    ## run gravity
-    gravity_value = os.path.basename(model_file).split('_')[2]
-    reuse.gravity(gravity=float(gravity_value), gravity_unit=u.Unit('m/(s**2)'))
-    print("Model successfully reloaded for new calculations!")
-    sp = reuse.spectrum(opa_reload)
-    sp = convert_and_regrid(sp, R=500)
+    # Plot all models in results on the same plot for comparison 
+    # using uniform cmap hot
+    plt.figure(figsize=(15, 10))
+    from matplotlib.lines import Line2D
+    import matplotlib.colors as mcolors
+    import matplotlib.cm as cm
+    # Create a colormap based on the number of models
+    cmap = cm.get_cmap('bwr_r', len(results))
+    # Create custom legend handles
+    handles = []
+    for i, model in enumerate(results):
+        if 'error' in model:
+            continue  # Skip models that had errors
+        fsed = model['params']['fsed']
+        label = f"fsed={fsed}" if not isinstance(fsed, dict) else "fsed=" + "-".join(f"{sp}{v}" for sp, v in fsed.items())
+        plt.plot(model['wavelength'], model['thermal'], color=cmap(i), label=label)
+        handles.append(Line2D([0], [0], color=cmap(i), lw=2, label=label))
+    plt.xlabel('Wavelength (micron)')
+    plt.ylabel('Flux (erg/s/cm^2/cm)')
+    plt.title('Comparison of Spectra from All Models')
+    plt.yscale('linear')
+    plt.legend(handles=handles, title="Model Parameters", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid()
+    plt.show()
 
-    p = show(jpi.spectrum(1e4/sp['regridx'], sp['regridy'],
-        plot_height=400, plot_width=700, title="Reloaded Spectrum: "+model_file))
+    plt.savefig(os.path.join(output_dir, 'all_models_comparison.png'), bbox_inches='tight')
+
+    # ## Load a specific model file, reload and reuse
+    # nc_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith('.nc')]
+    # model_file = nc_files[0]
+    # ds = xarray.load_dataset(model_file)
+    # print(f"Dataset dimensions: {ds.dims}")
+    # print(f"Available variables: {list(ds.data_vars)}")
+    # opa_reload = jdi.opannection(wave_range=[1, 10])
+    # reuse = jdi.input_xarray(ds, opa_reload, calculation='browndwarf')
+    # ## run gravity
+    # gravity_value = os.path.basename(model_file).split('_')[2]
+    # reuse.gravity(gravity=float(gravity_value), gravity_unit=u.Unit('m/(s**2)'))
+    # print("Model successfully reloaded for new calculations!")
+    # sp = reuse.spectrum(opa_reload)
+
+    # p = show(jpi.spectrum(1e4/sp['regridx'], sp['regridy'],
+    #     plot_height=400, plot_width=700, title="Reloaded Spectrum: "+model_file))
 # %%

@@ -1089,28 +1089,28 @@ if __name__ == "__main__":
     photometryh5dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
     
     ### test static/dynamic
-    # photrunName = 'test_polar_v0_static.h5'
+    photrunName = 'test_polar_v0_static.h5' # used for complex fsed test as well
     # photrunName = 'test_polar_v0_dynamic.h5'
 
     # photrunName = 'test_polar_v1_static.h5'
-    photrunName = 'test_polar_v1_dynamic.h5'
+    # photrunName = 'test_polar_v1_dynamic.h5'
 
     # photrunName = 'test_polar_v2_static.h5'
     # photrunName = 'test_polar_v2_dynamic.h5'
 
     ### polar long-baseline static/dyamic
-    # photrunName = 'polar_v1_static_baseline120.h5'
+    # photrunName = 'polar_v1_static_baseline120.h5' # not used in paper
 
-    ### test onlyVortex static/dynamic
-    # photrunName = 'test_onlyVortex_v0_static.h5'
-    # photrunName = 'test_onlyVortex_v0_dynamic1.h5'
-    # photrunName = 'test_onlyVortex_v0_dynamic2.h5'
+    ### test onlyVortex static/dynamic 
+    # photrunName = 'test_onlyVortex_v0_static.h5' 
+    # photrunName = 'test_onlyVortex_v0_dynamic1.h5' 
+    # photrunName = 'test_onlyVortex_v0_dynamic2.h5' 
 
     ### jwst static/dynamic
-    # photrunName = 'jwst_v0_static.h5'
-    # photrunName = 'jwst_v0_dynamic.h5'
-
     # photrunName = 'jwst_v1_static.h5'
+
+    # photrunName = 'jwst_v0_static.h5' # not used in paper
+    # photrunName = 'jwst_v0_dynamic.h5' # not used in paper
 
     path = os.path.join(photometryh5dir, photrunName)
     results = readPhotometry(path)
@@ -1123,14 +1123,15 @@ if __name__ == "__main__":
     # n = 20
     
     ### Simple fsed, n=50
-    specConfigName = f'1200K_clouds=50'
-    specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
-    n = 50
+    # specConfigName = f'1200K_clouds=50_newSpec1_logg2e4'
+    # #### specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
+    # specFolderName = 'bd_grid_noCH4_n=50_R=300_20260504_182749'
+    # n = 50
 
     ### Comlex fsed per species, n=20
-    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4'
-    # specFolderName = 'bd_grid_noCH4_complex_fsed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260321_143742'
-    # n = 20
+    specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
+    specFolderName = 'bd_grid_complex_noCH4_n=50_R=300_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260504_184139'
+    n = 50
     
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 
