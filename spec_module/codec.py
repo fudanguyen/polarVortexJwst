@@ -1129,9 +1129,12 @@ if __name__ == "__main__":
     # n = 50
 
     ### Comlex fsed per species, n=20
-    specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
-    specFolderName = 'bd_grid_complex_noCH4_n=50_R=300_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260504_184139'
-    n = 50
+    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
+    specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg1e4'
+    # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=50_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_131706'
+    specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=20_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_161919'
+    n = 20
+    # n = 50
     
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 

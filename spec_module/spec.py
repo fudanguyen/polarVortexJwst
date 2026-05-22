@@ -547,7 +547,17 @@ if __name__ == "__main__":
     ### Simple 3 clouds
     # runnerName = 'bd_grid_noCH4_n=50_R=300'
     # runnerName = 'bd_grid_withCH4_n=50_R=300'
-    runnerName = 'bd_grid_complex_noCH4_n=50_R=300'
+    runnerName = 'bd_grid_withCH4_n=20_R=300'
+    # runnerName = 'bd_grid_complex_noCH4_n=50_R=300'
+    # runnerName = 'bd_grid_complex1logg1e4_noCH4_n=20_R=2000'
+
+    g_cgs_list = [1e4] # cm/s^2
+    # g_cgs_list = [2e4] # cm/s^2
+    wave_rangeList = [[0.3, 10.0]] # um
+    # wave_rangeList = [[0.3,5]]
+    Teff_list = [1200] # K
+    C_to_O_list = [0] # log10[C/O]
+    kzz_list = [1e7] # kzz
 
     R = int(runnerName.split('_R=')[-1])
     if 'complex' in runnerName:
@@ -588,14 +598,14 @@ if __name__ == "__main__":
         # → [{'Fe': 14, 'MgSiO3': 3.1, 'Na2S': 4.6}, ..., {'Fe': 14, 'MgSiO3': 3.9, 'Na2S': 2.8}]
 
     param_grid = create_parameter_grid(
-        Teff_list=[1200], # 
-        C_to_O_list=[0.],
-        wave_range_list=[[0.3, 10.0]], # wavelength range in microns 
+        Teff_list=Teff_list, # 
+        C_to_O_list=C_to_O_list,
+        wave_range_list=wave_rangeList, # wavelength range in microns 
         R_list=[R], # Spectral resolution for regridding the output spectrum
-        gravity_list=[20000], # gravity in unit of cm/s^2
+        gravity_list=g_cgs_list, # gravity in unit of cm/s^2
         fsed_list=fsed_list, # the range of fsed values to run (either in simple mode (same or all gases) or complex mode (per-species))
         excluded_mol_list=[excluded_mol], # gas to exclude from the atmosphere (e.g. to test its impact on the spectrum)
-        gases_list=[['Fe', 'MgSiO3', 'Na2S']],
+        gases_list=[gases],
         kzz_list=[1e7],
         cloudfree=False  # Set to True for cloud-free models only
     )
@@ -664,10 +674,11 @@ if __name__ == "__main__":
     plt.yscale('linear')
     plt.legend(handles=handles, title="Model Parameters", bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.grid()
-    plt.show()
 
     plt.savefig(os.path.join(output_dir, 'all_models_comparison.png'), bbox_inches='tight')
-
+    plt.show()
+    plt.close()
+    
     # ## Load a specific model file, reload and reuse
     # nc_files = [os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.endswith('.nc')]
     # model_file = nc_files[0]
