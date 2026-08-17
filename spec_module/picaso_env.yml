@@ -1,0 +1,109 @@
+# packages in environment at /Users/nguyendat/opt/anaconda3/envs/picaso:
+#
+# Name                    Version                   Build  Channel
+alabaster                 0.7.13                   pypi_0    pypi
+appnope                   0.1.4              pyhd8ed1ab_0    conda-forge
+astropy                   5.2.2                    pypi_0    pypi
+babel                     2.17.0                   pypi_0    pypi
+backcall                  0.2.0              pyh9f0ad1d_0    conda-forge
+beautifulsoup4            4.13.4                   pypi_0    pypi
+bokeh                     3.1.1                    pypi_0    pypi
+ca-certificates           2025.4.26            hbd8a1cb_0    conda-forge
+certifi                   2025.4.26                pypi_0    pypi
+cftime                    1.6.4.post1              pypi_0    pypi
+charset-normalizer        3.4.2                    pypi_0    pypi
+comm                      0.2.2                    pypi_0    pypi
+contourpy                 1.1.1                    pypi_0    pypi
+cycler                    0.12.1                   pypi_0    pypi
+decorator                 4.4.2                      py_0    conda-forge
+docutils                  0.20.1                   pypi_0    pypi
+entrypoints               0.4                pyhd8ed1ab_0    conda-forge
+extension-helpers         1.2.0                    pypi_0    pypi
+fonttools                 4.57.0                   pypi_0    pypi
+h5netcdf                  1.1.0                    pypi_0    pypi
+h5py                      3.9.0                    pypi_0    pypi
+idna                      3.10                     pypi_0    pypi
+imagesize                 1.4.1                    pypi_0    pypi
+importlib-metadata        8.5.0                    pypi_0    pypi
+importlib-resources       6.4.5                    pypi_0    pypi
+ipykernel                 5.5.5            py38h6c79ece_0    conda-forge
+ipympl                    0.9.3                    pypi_0    pypi
+ipython                   7.33.0           py38h50d1736_0    conda-forge
+ipython_genutils          0.2.0              pyhd8ed1ab_1    conda-forge
+ipywidgets                8.1.7                    pypi_0    pypi
+jedi                      0.18.2             pyhd8ed1ab_0    conda-forge
+jinja2                    3.1.6                    pypi_0    pypi
+joblib                    1.4.2                    pypi_0    pypi
+jupyter_client            7.4.9              pyhd8ed1ab_0    conda-forge
+jupyter_core              5.8.1              pyh31011fe_0    conda-forge
+jupyterlab-widgets        3.0.15                   pypi_0    pypi
+kiwisolver                1.4.7                    pypi_0    pypi
+libcxx                    14.0.6               h9765a3e_0  
+libffi                    3.4.4                hecd8cb5_1  
+libsodium                 1.0.18               hbcb3906_1    conda-forge
+llvmlite                  0.41.1                   pypi_0    pypi
+markupsafe                2.1.5                    pypi_0    pypi
+matplotlib                3.7.5                    pypi_0    pypi
+matplotlib-inline         0.1.7              pyhd8ed1ab_0    conda-forge
+miepython                 3.0.2                    pypi_0    pypi
+ncurses                   6.4                  hcec6c5f_0  
+nest-asyncio              1.6.0              pyhd8ed1ab_0    conda-forge
+netcdf4                   1.7.2                    pypi_0    pypi
+numba                     0.58.1                   pypi_0    pypi
+numpy                     1.24.4                   pypi_0    pypi
+openssl                   3.5.0                hc426f3f_1    conda-forge
+packaging                 25.0                     pypi_0    pypi
+pandas                    2.0.3                    pypi_0    pypi
+parso                     0.8.4              pyhd8ed1ab_0    conda-forge
+pexpect                   4.9.0              pyhd8ed1ab_0    conda-forge
+photutils                 1.8.0                    pypi_0    pypi
+picaso                    3.3                       dev_0    <develop>
+pickleshare               0.7.5                   py_1003    conda-forge
+pillow                    10.4.0                   pypi_0    pypi
+pip                       24.2             py38hecd8cb5_0  
+platformdirs              4.3.6              pyhd8ed1ab_0    conda-forge
+prompt-toolkit            3.0.43             pyha770c72_0    conda-forge
+ptyprocess                0.7.0              pyhd3deb0d_0    conda-forge
+pyerfa                    2.0.0.3                  pypi_0    pypi
+pygments                  2.19.1                   pypi_0    pypi
+pyparsing                 3.1.4                    pypi_0    pypi
+pysynphot                 2.0.0                    pypi_0    pypi
+python                    3.8.20               hce00570_0  
+python-dateutil           2.9.0.post0              pypi_0    pypi
+python_abi                3.8                      2_cp38    conda-forge
+pytz                      2025.2                   pypi_0    pypi
+pyyaml                    6.0.2                    pypi_0    pypi
+pyzmq                     24.0.1           py38h0b711fd_0    conda-forge
+readline                  8.2                  hca72f7f_0  
+requests                  2.32.3                   pypi_0    pypi
+scipy                     1.10.1                   pypi_0    pypi
+seaborn                   0.13.2                   pypi_0    pypi
+setuptools                75.1.0           py38hecd8cb5_0  
+six                       1.17.0                   pypi_0    pypi
+snowballstemmer           3.0.1                    pypi_0    pypi
+soupsieve                 2.7                      pypi_0    pypi
+sphinx                    7.1.2                    pypi_0    pypi
+sphinxcontrib-applehelp   1.0.4                    pypi_0    pypi
+sphinxcontrib-devhelp     1.0.2                    pypi_0    pypi
+sphinxcontrib-htmlhelp    2.0.1                    pypi_0    pypi
+sphinxcontrib-jsmath      1.0.1                    pypi_0    pypi
+sphinxcontrib-qthelp      1.0.3                    pypi_0    pypi
+sphinxcontrib-serializinghtml 1.1.5                    pypi_0    pypi
+sqlite                    3.45.3               h6c40b1e_0  
+tk                        8.6.14               h0a12a5f_1  
+tomli                     2.2.1                    pypi_0    pypi
+tornado                   6.4.2                    pypi_0    pypi
+traitlets                 5.14.3             pyhd8ed1ab_0    conda-forge
+typing-extensions         4.13.2                   pypi_0    pypi
+tzdata                    2025.2                   pypi_0    pypi
+urllib3                   2.2.3                    pypi_0    pypi
+virga-exo                 0.5                      pypi_0    pypi
+wcwidth                   0.2.13             pyhd8ed1ab_0    conda-forge
+wheel                     0.44.0           py38hecd8cb5_0  
+widgetsnbextension        4.0.14                   pypi_0    pypi
+xarray                    2022.12.0                pypi_0    pypi
+xyzservices               2025.4.0                 pypi_0    pypi
+xz                        5.6.4                h46256e1_1  
+zeromq                    4.3.5                hcec6c5f_0  
+zipp                      3.20.2                   pypi_0    pypi
+zlib                      1.2.13               h4b97444_1  

@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "codec_definitions": {
+    "cloud_thickness": {
+      "max_value": 10,
+      "values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "description": "Cloud optical depth levels"
+    }
+  },
+  "codec_order": [
+    "cloud_thickness"
+  ],
+  "spectra_assignments": {
+    "0": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.0000_cloudy.csv",
+    "1": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.0500_cloudy.csv",
+    "2": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.1000_cloudy.csv",
+    "3": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.1500_cloudy.csv",
+    "4": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.2000_cloudy.csv",
+    "5": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.2500_cloudy.csv",
+    "6": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.3000_cloudy.csv",
+    "7": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.3500_cloudy.csv",
+    "8": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.4000_cloudy.csv",
+    "9": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=10_R=300_20260816_211138/spec_1300_10000_1.0000E+07_1.4500_cloudy.csv"
+  },
+  "metadata": {
+    "created": "2026-08-16T21:15:26.242361",
+    "total_combinations": 10,
+    "assigned_spectra": 10
+  }
+}

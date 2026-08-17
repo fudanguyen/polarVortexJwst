@@ -1082,6 +1082,114 @@ def digitize_frames(results, bins):
         digitized = np.digitize(gray_array, bins, right=True)
         results[inclin]['digitized'] = digitized
 
+def plot_variability_map(composite_spectra_ts, time_array, wave_bin=0.1, t_max=10.0,
+                          wave_range=None, inclin=None, cmap='RdBu_r', save_path=None):
+    """
+    Build and plot a time-vs-wavelength variability map from a composite
+    spectra time series.
+ 
+    Bins flux into `wave_bin`-wide wavelength bins, keeps only frames with
+    time <= t_max, and plots each bin's percent deviation from its own
+    time-mean flux -- i.e. how much a given wavelength's flux varies over
+    the selected time window, as a 2D (time, wavelength) map.
+ 
+    Parameters:
+        composite_spectra_ts (list): output of
+            codec.calculate_composite_spectra_timeseries(), i.e.
+            [(frame_idx, wavelength_array, flux_array), ...]
+        time_array (array): time in hours for each frame, aligned by
+            position with composite_spectra_ts (e.g.
+            results[inclin]['time_array'])
+        wave_bin (float): wavelength bin width in microns (default 0.1 um)
+        t_max (float): only include frames with time <= t_max hours
+            (default 10.0)
+        wave_range (tuple, optional): (a, b) in microns -- restrict the
+            plotted/binned wavelength axis to this region. If None
+            (default), uses the full wavelength grid. Points outside the
+            range are excluded from binning entirely (not clamped into
+            the edge bins).
+        inclin (str, optional): inclination label, used only in the title
+        cmap (str): diverging colormap name, since variability is signed
+        save_path (str, optional): if given, save the figure here
+ 
+    Returns:
+        fig, ax, wave_centers, time_sel, variability
+            wave_centers (1D array): center wavelength of each bin
+            time_sel (1D array): selected times (hours, <= t_max)
+            variability (2D array, shape (n_time, n_wave_bins)): percent
+                deviation of binned flux from its own time-mean
+    """
+    time_array = np.asarray(time_array)
+    time_mask = time_array <= t_max
+    if not np.any(time_mask):
+        raise ValueError(f"No frames found with time <= {t_max} hours")
+ 
+    # All frames share the same wavelength grid (enforced upstream by
+    # load_all_spectra's grid-consistency check), so bin edges only need
+    # to be computed once from the first frame.
+    wave_full = composite_spectra_ts[0][1]
+ 
+    if wave_range is not None:
+        a, b = wave_range
+        if a >= b:
+            raise ValueError(f"wave_range must be (a, b) with a < b, got {wave_range}")
+        wmin, wmax = max(a, wave_full.min()), min(b, wave_full.max())
+        if wmin >= wmax:
+            raise ValueError(
+                f"wave_range {wave_range} does not overlap the available "
+                f"wavelength grid ({wave_full.min():.3f}-{wave_full.max():.3f} um)"
+            )
+    else:
+        wmin, wmax = wave_full.min(), wave_full.max()
+ 
+    n_bins = max(1, int(np.ceil((wmax - wmin) / wave_bin)))
+    bin_edges = wmin + wave_bin * np.arange(n_bins + 1)
+    bin_edges[-1] = wmax + 1e-9  # ensure the last wavelength point is included
+    wave_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+ 
+    binned_flux, time_sel = [], []
+    for (frame_idx, wave_i, flux_i), t, keep in zip(composite_spectra_ts, time_array, time_mask):
+        if not keep:
+            continue
+        # Restrict to [wmin, wmax] BEFORE digitizing so out-of-range
+        # points are excluded rather than clamped into the edge bins.
+        in_range = (wave_i >= wmin) & (wave_i <= wmax)
+        wave_i, flux_i = wave_i[in_range], flux_i[in_range]
+ 
+        bin_idx = np.clip(np.digitize(wave_i, bin_edges) - 1, 0, n_bins - 1)
+        row = np.array([
+            flux_i[bin_idx == b].mean() if np.any(bin_idx == b) else np.nan
+            for b in range(n_bins)
+        ])
+        binned_flux.append(row)
+        time_sel.append(t)
+ 
+    binned_flux = np.array(binned_flux)  # shape (n_time, n_wave_bins)
+    time_sel = np.array(time_sel)
+ 
+    mean_flux = np.nanmean(binned_flux, axis=0, keepdims=True)
+    variability = 100.0 * (binned_flux - mean_flux) / mean_flux  # % deviation
+ 
+    fig, ax = plt.subplots(figsize=(8, 5))
+    vmax = np.nanmax(np.abs(variability))
+    mesh = ax.pcolormesh(wave_centers, time_sel, variability,
+                          shading='nearest', cmap=cmap, vmin=-vmax, vmax=vmax)
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label('Variability (% deviation from time-mean flux)')
+    ax.set_xlabel('Wavelength (μm)')
+    ax.set_ylabel('Time (hours)')
+    title = 'Spectral Variability Map'
+    if inclin is not None:
+        title += f' (i={inclin})'
+    ax.set_title(title)
+    plt.tight_layout()
+ 
+    if save_path is not None:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved variability map to {save_path}")
+ 
+    return fig, ax, wave_centers, time_sel, variability
+
 # ===== DEMO USAGE =====
 
 if __name__ == "__main__":
@@ -1119,7 +1227,7 @@ if __name__ == "__main__":
     # specConfigName = f'1200k_clouds=20'
     # ### specFolderName = 'bd_grid_20251108_162457_all5condensates'
     # ### specFolderName = 'bd_grid_20251202_simple3clouds'
-    # specFolderName = 'bd_grid_noCH4_20251209_153457'
+    # specFolderName = 'bd_grid_withCH4_n=20_R=300_20260511_201352'
     # n = 20
     
     ### Simple fsed, n=50
@@ -1129,13 +1237,28 @@ if __name__ == "__main__":
     # n = 50
 
     ### Comlex fsed per species, n=20
-    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
-    specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg1e4'
-    # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=50_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_131706'
-    specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=20_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_161919'
-    n = 20
-    # n = 50
-    
+    # # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
+    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg1e4'
+    # # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=50_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_131706'
+    # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=20_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_161919'
+    # n = 20
+    # # n = 50
+
+    ### With SiO2, CH4, n=50, 1400K, 5e5 Kzz, fsed=1-1.2, logg=4
+    # specConfigName = f'1400K_fsed=1-1.2_Kzz=5e5_logg4_SiO2_withCH4_n=50'
+    # n=50
+    # specFolderName = 'bd_v2_grid_withCH4_fsed=1.0_n=50_R=300_20260816_172244'
+
+    ### With SiO2, CH4, n=50, 1400K, 5e5 Kzz, fsed=1-1.5, logg=4
+    # specConfigName = f'1400K_fsed=1-1.5_Kzz=5e5_logg4_SiO2_withCH4_n=50'
+    # n=50
+    # specFolderName = 'bd_v2_grid_withCH4_fsed=1.0-1.50_n=50_R=300_20260816_180147'
+
+     ### With SiO2, CH4, n=50, 1300K, 1e7 Kzz, fsed=1-1.5, logg=4
+    specConfigName = f'1300K_fsed=1-1.5_Kzz=1e7_logg4_SiO2_withCH4_n=50'
+    n=50
+    specFolderName = 'bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=50_R=300_20260816_212459'
+
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 
     print("\n===== CODEC PROCESSING =====")
@@ -1405,5 +1528,17 @@ if __name__ == "__main__":
         print(f"Loaded {info['n_spectra']} spectra")
         print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
         print(f"Number of wavelength points: {info['n_wavelength_points']}")
+
+# %%
+if __name__ == "__main__":
+    inclin = '30' 
+    fig, ax, wave_centers, time_sel, variability = plot_variability_map(
+        composite_spectra_ts,
+        results[inclin]['time_array'],
+        wave_bin=0.01,
+        t_max=10.0,
+        wave_range=(1, 10.0),
+        inclin=inclin,
+        save_path=None)
 
 # %%

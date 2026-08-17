@@ -1,0 +1,1667 @@
+import numpy as np
+import json
+import os
+from datetime import datetime
+from collections import Counter
+import itertools
+from scipy.ndimage import zoom
+import h5py
+import numpy as np
+import matplotlib.pyplot as plt
+import glob
+import pickle
+
+#%%
+class CodecSystem:
+    """
+    A system for managing multi-dimensional codec mappings for spectral analysis.
+    
+    Handles arbitrary codec value spaces, generates unique IDs for all combinations,
+    and manages spectral assignments for fractional area calculations.
+    """
+    
+    def __init__(self):
+        """Initialize empty codec registry."""
+        self.codec_definitions = {}
+        # Structure: {
+        #     'codec_name': {
+        #         'max_value': int,
+        #         'values': list,
+        #         'value_to_index': dict,
+        #         'index_to_value': dict,
+        #         'description': str
+        #     }
+        # }
+        
+        self.combination_map = {}
+        # Structure: {codec_id: {'codec_name': value, ...}}
+        
+        self.reverse_combination_map = {}
+        # Structure: {(value1, value2, ...): codec_id}
+        
+        self.spectra_assignments = {}
+        # Structure: {codec_id: 'filepath'}
+        
+        self.codec_order = []
+        # List of codec names in insertion order
+        
+        self._combinations_valid = False
+    
+    def add_codec_type(self, name, max_value=None, values=None, description=''):
+        """
+        Register a new codec type with flexible value specification.
+        
+        Parameters:
+            name (str): Codec identifier (e.g., 'cloud_thickness')
+            max_value (int, optional): If provided, assumes sequential [1, 2, ..., max_value]
+            values (list/array, optional): Explicit list of allowed values (e.g., [100, 150, 200])
+            description (str): Human-readable description
+        
+        Examples:
+            >>> codec.add_codec_type('cloud_thickness', max_value=11)
+            >>> codec.add_codec_type('feature_type', values=[150, 200, 250])
+        """
+        # Validation
+        if name in self.codec_definitions:
+            raise ValueError(f"Codec '{name}' already registered")
+        
+        if max_value is None and values is None:
+            raise ValueError("Must provide either 'max_value' or 'values'")
+        
+        if max_value is not None and values is not None:
+            raise ValueError("Provide only one of 'max_value' or 'values'")
+        
+        # Generate values list
+        if max_value is not None:
+            values = list(range(1, max_value + 1))
+        else:
+            # Clean up provided values
+            values = sorted(list(set(values)))
+            # Exclude 0 (background) if present
+            values = [v for v in values if v != 0]
+            
+            if len(values) == 0:
+                raise ValueError("No valid values after removing background (0)")
+        
+        # Warn if 0 found in original values
+        if values is not None and 0 in values:
+            print(f"WARNING: Codec '{name}' contains 0 (background value). "
+                  f"This will be excluded from valid codec values.")
+        
+        # Create bidirectional mappings
+        value_to_index = {val: idx for idx, val in enumerate(values)}
+        index_to_value = {idx: val for idx, val in enumerate(values)}
+        
+        # Store definition
+        self.codec_definitions[name] = {
+            'max_value': len(values),
+            'values': values,
+            'value_to_index': value_to_index,
+            'index_to_value': index_to_value,
+            'description': description
+        }
+        
+        # Track order
+        self.codec_order.append(name)
+        
+        # Invalidate combinations (need regeneration)
+        self._combinations_valid = False
+        
+        print(f"Added codec '{name}' with {len(values)} values: {values}")
+    
+    def generate_combinations(self):
+        """
+        Generate all possible codec combinations and assign unique IDs.
+        
+        Uses Cartesian product to create all combinations.
+        Total IDs = product of all codec max_values.
+        """
+        if len(self.codec_definitions) == 0:
+            raise ValueError("No codecs registered. Use add_codec_type() first.")
+        
+        # Extract value lists in order
+        codec_names = self.codec_order
+        value_lists = [self.codec_definitions[name]['values'] for name in codec_names]
+        
+        # Generate Cartesian product
+        combinations = list(itertools.product(*value_lists))
+        
+        # Clear existing maps
+        self.combination_map = {}
+        self.reverse_combination_map = {}
+        
+        # Assign IDs
+        for codec_id, combo in enumerate(combinations):
+            # Forward map: ID → combination dict
+            combo_dict = {codec_names[i]: combo[i] for i in range(len(codec_names))}
+            self.combination_map[codec_id] = combo_dict
+            
+            # Reverse map: tuple → ID
+            self.reverse_combination_map[combo] = codec_id
+        
+        self._combinations_valid = True
+        
+        print(f"Generated {len(self.combination_map)} codec combinations")
+        print(f"ID range: 0-{len(self.combination_map)-1}")
+    
+    def assign_spectra(self, codec_id, filepath, validate=True):
+        """
+        Map a specific codec ID to a spectra file path.
+        
+        Parameters:
+            codec_id (int): The unique combination ID
+            filepath (str): Path to CSV file containing spectral data
+            validate (bool): If True, check file exists and ID is valid
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() before assigning spectra")
+        
+        if validate:
+            # Check ID exists
+            if codec_id not in self.combination_map:
+                raise ValueError(
+                    f"Invalid codec_id {codec_id}. "
+                    f"Valid range: 0-{len(self.combination_map)-1}"
+                )
+            
+            # Check file exists
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Spectra file not found: {filepath}")
+        
+        # Assign
+        self.spectra_assignments[codec_id] = filepath
+    
+    def assign_spectra_bulk(self, assignments):
+        """
+        Assign multiple spectra at once.
+        
+        Parameters:
+            assignments (dict): {codec_id: filepath, ...}
+        """
+        for codec_id, filepath in assignments.items():
+            self.assign_spectra(codec_id, filepath, validate=True)
+    
+    def assign_spectra_pattern(self, pattern, start_id=0, end_id=None):
+        """
+        Assign spectra using a filename pattern.
+        
+        Parameters:
+            pattern (str): Format string with {id} placeholder
+                          e.g., 'spectra/cloud_{id}.csv'
+            start_id (int): Starting ID for assignment
+            end_id (int): Ending ID (None = all remaining)
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() first")
+        
+        if end_id is None:
+            end_id = len(self.combination_map)
+        
+        for codec_id in range(start_id, end_id):
+            filepath = pattern.format(id=codec_id)
+            self.assign_spectra(codec_id, filepath, validate=False)
+        
+        print(f"Assigned spectra for IDs {start_id}-{end_id-1} using pattern")
+    
+    def create_composite_image(self, alignment_policy='largest', 
+                               warn_threshold=2.0, **codec_arrays):
+        """
+        Convert multiple codec arrays into a single composite image with unique IDs.
+        
+        Parameters:
+            alignment_policy (str): 'largest', 'smallest', 'most_common', or tuple
+            warn_threshold (float): Warn if downsampling by this factor
+            **codec_arrays: dict of {codec_name: 2D_array}
+        
+        Returns:
+            composite (2D array): Array of codec IDs (NaN for background)
+        
+        Example:
+            >>> composite = codec.create_composite_image(
+            ...     cloud_thickness=results['40']['digitized'][0],
+            ...     feature_type=results['40']['specmask']
+            ... )
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() first")
+        
+        # Validate codec names
+        for name in codec_arrays.keys():
+            if name not in self.codec_definitions:
+                raise ValueError(
+                    f"Codec '{name}' not registered. Use add_codec_type() first."
+                )
+        
+        # Check all required codecs provided
+        for name in self.codec_order:
+            if name not in codec_arrays:
+                raise ValueError(f"Missing required codec: '{name}'")
+        
+        # Check and align dimensions
+        shapes = [arr.shape for arr in codec_arrays.values()]
+        
+        if len(set(shapes)) > 1:
+            print(f"WARNING: Mismatched dimensions detected: {set(shapes)}")
+            target_shape = self._determine_target_shape(shapes, alignment_policy)
+            print(f"Aligning all arrays to {target_shape}")
+            codec_arrays = self._align_arrays(
+                codec_arrays, target_shape, warn_threshold=warn_threshold
+            )
+        else:
+            target_shape = shapes[0]
+        
+        # Create background mask (where ANY codec has value 0)
+        background_mask = np.zeros(target_shape, dtype=bool)
+        for name, array in codec_arrays.items():
+            background_mask |= (array == 0)
+        
+        # Initialize composite
+        composite = np.full(target_shape, np.nan, dtype=float)
+        
+        # Encode to codec IDs (optimized vectorized version)
+        # Create index arrays for each codec
+        index_arrays = []
+        for name in self.codec_order:
+            values = codec_arrays[name]
+            value_to_index = self.codec_definitions[name]['value_to_index']
+            
+            # Map values to indices
+            indices = np.zeros_like(values, dtype=int)
+            for val, idx in value_to_index.items():
+                indices[values == val] = idx
+            index_arrays.append(indices)
+        
+        # Compute linear index using mixed-radix encoding
+        # For [cloud_thickness, feature_type] with max values [11, 3]:
+        # ID = cloud_idx * 3 + feature_idx
+        max_values = [self.codec_definitions[name]['max_value'] 
+                      for name in self.codec_order]
+        strides = [1]
+        for mv in reversed(max_values[1:]):
+            strides.insert(0, strides[0] * mv)
+        
+        composite_int = np.zeros(target_shape, dtype=int)
+        for idx_array, stride in zip(index_arrays, strides):
+            composite_int += idx_array * stride
+        
+        # Convert to float and apply background mask
+        composite = composite_int.astype(float)
+        composite[background_mask] = np.nan
+        
+        return composite
+    
+    def calculate_spectral_fractions(self, composite_image, detailed=False, 
+                            limb_darkening=True, ld_law='cubic'):
+        """
+        Calculate the fractional area contribution of each codec ID.
+        
+        Parameters:
+            composite_image (2D array): Array of codec IDs (with NaN for background)
+            detailed (bool): If True, return additional metadata
+            limb_darkening (bool): If True, apply limb-darkening weights to fractions
+            ld_law (str): Limb-darkening law to use
+                - 'sqrt': μ = sqrt(1 - r²/R²)  [linear, least aggressive]
+                - 'quadratic': μ = (1 - r²/R²)  [more aggressive]
+                - 'cubic': μ = (1 - r²/R²)^(3/2)  [very aggressive]
+                - 'cosine': μ = cos(πr/2R)  [smooth falloff]
+                - 'exponential': μ = exp(-3r²/R²)  [gaussian-like]
+        
+        Returns:
+            dict: {codec_id: fraction, ...} or detailed dict if detailed=True
+        """
+        # Flatten and remove NaN (background)
+        valid_mask = ~np.isnan(composite_image)
+        valid_pixels = composite_image[valid_mask]
+        
+        if len(valid_pixels) == 0:
+            print("WARNING: No valid pixels found (all background)")
+            return {} if not detailed else {
+                'fractions': {},
+                'counts': {},
+                'total_pixels': 0,
+                'background_pixels': composite_image.size,
+                'coverage': 0.0
+            }
+        
+        # Calculate weights (limb-darkening or uniform)
+        if limb_darkening:
+            # Get image dimensions and calculate center
+            ny, nx = composite_image.shape
+            center_y, center_x = ny / 2, nx / 2
+            
+            # Create coordinate grids
+            y_coords, x_coords = np.ogrid[:ny, :nx]
+            
+            # Calculate distance from center for all pixels
+            distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+            
+            # Estimate radius from the valid pixels (maximum distance)
+            R = np.nanmax(distances[valid_mask])
+            
+            # Calculate normalized radius
+            r_normalized = distances / R
+            
+            # Apply chosen limb-darkening law
+            if ld_law == 'sqrt':
+                # Linear limb-darkening: μ = sqrt(1 - r²/R²)
+                mu = np.sqrt(np.maximum(0, 1 - r_normalized**2))
+            
+            elif ld_law == 'quadratic':
+                # Quadratic: μ = 1 - r²/R²
+                mu = np.maximum(0, 1 - r_normalized**2)
+            
+            elif ld_law == 'cubic':
+                # Cubic: μ = (1 - r²/R²)^(3/2)
+                mu = np.maximum(0, 1 - r_normalized**2)**(3/2)
+            
+            elif ld_law == 'cosine':
+                # Cosine falloff: μ = cos(πr/2R)
+                mu = np.cos(np.pi * r_normalized / 2)
+                mu = np.maximum(0, mu)  # Clip negative values
+            
+            elif ld_law == 'exponential':
+                # Exponential/Gaussian-like: μ = exp(-3r²/R²)
+                mu = np.exp(-3 * r_normalized**2)
+            
+            else:
+                raise ValueError(f"Unknown limb-darkening law: {ld_law}")
+            
+            # Extract weights for valid pixels only
+            weights = mu[valid_mask]
+        else:
+            # Uniform weighting
+            weights = np.ones_like(valid_pixels)
+        
+        # Get unique codec IDs
+        unique_ids = np.unique(valid_pixels[~np.isnan(valid_pixels)])
+        
+        # Calculate weighted sums for each codec ID
+        fractions = {}
+        counts_dict = {}
+        total_weight = np.sum(weights)
+        
+        for codec_id in unique_ids:
+            mask = (valid_pixels == codec_id)
+            pixel_count = np.sum(mask)
+            weighted_sum = np.sum(weights[mask])
+            
+            fractions[int(codec_id)] = weighted_sum / total_weight
+            counts_dict[int(codec_id)] = int(pixel_count)
+        
+        if detailed:
+            return {
+                'fractions': fractions,
+                'counts': counts_dict,
+                'total_pixels': int(len(valid_pixels)),
+                'background_pixels': int(np.sum(np.isnan(composite_image))),
+                'coverage': float(len(valid_pixels) / composite_image.size),
+                'limb_darkening_applied': limb_darkening,
+                'ld_law': ld_law if limb_darkening else None,
+                'total_weight': float(total_weight) if limb_darkening else None
+            }
+        else:
+            return fractions
+    
+    def get_combination(self, codec_id):
+        """
+        Get codec combination for a single ID.
+        
+        Parameters:
+            codec_id (int): Codec ID
+        
+        Returns:
+            dict: {codec_name: value, ...}
+        
+        Example:
+            >>> codec.get_combination(5)
+            {'cloud_thickness': 2, 'feature_type': 200}
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() first")
+        
+        if codec_id not in self.combination_map:
+            raise ValueError(f"Invalid codec_id: {codec_id}")
+        
+        return self.combination_map[codec_id].copy()
+    
+    def get_combinations(self, codec_ids):
+        """
+        Get combinations for multiple IDs.
+        
+        Parameters:
+            codec_ids: array-like of integers
+        
+        Returns:
+            dict: {codec_id: combination_dict, ...}
+        """
+        return {cid: self.get_combination(cid) for cid in codec_ids}
+    
+    def get_codec_id(self, **codec_values):
+        """
+        Reverse lookup: get ID from codec values.
+        
+        Example:
+            >>> codec.get_codec_id(cloud_thickness=5, feature_type=200)
+            14
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() first")
+        
+        # Create tuple in correct order
+        try:
+            combo_tuple = tuple(codec_values[name] for name in self.codec_order)
+        except KeyError as e:
+            raise ValueError(f"Missing codec in query: {e}")
+        
+        if combo_tuple not in self.reverse_combination_map:
+            raise ValueError(f"Invalid combination: {codec_values}")
+        
+        return self.reverse_combination_map[combo_tuple]
+    
+    def print_combination(self, codec_id, include_spectra=True):
+        """
+        Human-readable description of a codec ID.
+        
+        Parameters:
+            codec_id (int): Codec ID to describe
+            include_spectra (bool): Include assigned spectra path
+        """
+        combo = self.get_combination(codec_id)
+        
+        print(f"\nCodec ID {codec_id}:")
+        for name, value in combo.items():
+            desc = self.codec_definitions[name].get('description', '')
+            if desc:
+                print(f"  {name}: {value}  ({desc})")
+            else:
+                print(f"  {name}: {value}")
+        
+        if include_spectra:
+            if codec_id in self.spectra_assignments:
+                print(f"  Spectra: {self.spectra_assignments[codec_id]}")
+            else:
+                print(f"  Spectra: [not assigned]")
+    
+    def print_all_combinations(self, max_display=50):
+        """
+        Print all codec combinations (limited display).
+        
+        Parameters:
+            max_display (int): Maximum number to display
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() first")
+        
+        total = len(self.combination_map)
+        print(f"\nTotal combinations: {total}")
+        print(f"Displaying first {min(max_display, total)}:\n")
+        
+        for codec_id in range(min(max_display, total)):
+            self.print_combination(codec_id, include_spectra=False)
+        
+        if total > max_display:
+            print(f"\n... and {total - max_display} more")
+    
+    def export_mapping(self, filepath):
+        """
+        Save codec configuration to JSON file.
+        
+        Parameters:
+            filepath (str): Output file path
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() before exporting")
+        
+        export_data = {
+            'version': '1.0',
+            'codec_definitions': self._serialize_codec_definitions(),
+            'codec_order': self.codec_order,
+            'spectra_assignments': {str(k): v for k, v in self.spectra_assignments.items()},
+            'metadata': {
+                'created': datetime.now().isoformat(),
+                'total_combinations': len(self.combination_map),
+                'assigned_spectra': len(self.spectra_assignments)
+            }
+        }
+        
+        with open(filepath, 'w') as f:
+            json.dump(export_data, f, indent=2)
+        
+        print(f"Exported codec mapping to {filepath}")
+    
+    def import_mapping(self, filepath, validate_files=True):
+        """
+        Load codec configuration from JSON file.
+        
+        Parameters:
+            filepath (str): Input file path
+            validate_files (bool): Check if assigned spectra files exist
+        """
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        
+        # Clear current state
+        self.__init__()
+        
+        # Restore codec definitions
+        for name in data['codec_order']:
+            defn = data['codec_definitions'][name]
+            self.add_codec_type(
+                name=name,
+                values=defn['values'],
+                description=defn.get('description', '')
+            )
+        
+        # Regenerate combinations
+        self.generate_combinations()
+        
+        # Restore spectra assignments
+        for codec_id_str, filepath_spec in data['spectra_assignments'].items():
+            codec_id = int(codec_id_str)
+            self.assign_spectra(codec_id, filepath_spec, validate=validate_files)
+        
+        print(f"Loaded codec mapping from {filepath}")
+        print(f"  Codec combinations: {len(self.combination_map)}")
+        print(f"  Spectra assignments: {len(self.spectra_assignments)}")
+    
+    def process_time_series(self, time_variant_codecs, time_constant_codecs=None, 
+                           frames=None, verbose=True):
+        """
+        Process multiple time frames with mixed time-variant/constant codecs.
+        
+        Parameters:
+            time_variant_codecs (dict): {codec_name: 3D_array (time, y, x)}
+            time_constant_codecs (dict): {codec_name: 2D_array (y, x)}
+            frames (list): Frame indices to process (None = all)
+            verbose (bool): Print progress
+        
+        Returns:
+            list: [
+                {'frame': 0, 'composite': array, 'fractions': {...}},
+                {'frame': 1, 'composite': array, 'fractions': {...}},
+                ...
+            ]
+        """
+        if not self._combinations_valid:
+            raise RuntimeError("Must call generate_combinations() first")
+        
+        if time_constant_codecs is None:
+            time_constant_codecs = {}
+        
+        # Determine number of frames
+        n_frames = next(iter(time_variant_codecs.values())).shape[0]
+        if frames is None:
+            frames = range(n_frames)
+        
+        results = []
+        for i, frame_i in enumerate(frames):
+            if verbose and i % 10 == 0:
+                print(f"Processing frame {i+1}/{len(frames)}")
+            
+            # Combine time-constant and current frame of time-variant
+            codec_arrays = time_constant_codecs.copy()
+            
+            for name, array_3d in time_variant_codecs.items():
+                codec_arrays[name] = array_3d[frame_i]
+            
+            # Process single frame
+            composite = self.create_composite_image(**codec_arrays)
+            fractions = self.calculate_spectral_fractions(composite, detailed=True)
+            
+            results.append({
+                'frame': frame_i,
+                'composite': composite,
+                'fractions': fractions
+            })
+        
+        if verbose:
+            print(f"Completed processing {len(frames)} frames")
+        
+        return results
+
+    # ========== Spectral Loading and Composite Calculation ==========
+    
+    def load_spectrum(self, codec_id):
+        """
+        Load spectrum from assigned CSV file for a specific codec ID.
+        
+        Parameters:
+            codec_id (int): Codec ID
+        
+        Returns:
+            tuple: (wavelength, flux) as numpy arrays
+        
+        Raises:
+            ValueError: If no spectrum assigned to this codec_id
+            FileNotFoundError: If file doesn't exist
+        """
+        if codec_id not in self.spectra_assignments:
+            raise ValueError(f"No spectrum assigned to codec_id {codec_id}")
+        
+        filepath = self.spectra_assignments[codec_id]
+        
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Spectrum file not found: {filepath}")
+        
+        # Load CSV (skip header line)
+        data = np.loadtxt(filepath, delimiter=',', skiprows=1)
+        
+        wavelength = data[:, 0]
+        flux = data[:, 1]
+        
+        return wavelength, flux
+
+    def load_all_spectra(self, verbose=True):
+        """
+        Load all assigned spectra into memory.
+        
+        Stores in self.spectra_data = {codec_id: (wavelength, flux), ...}
+        
+        Parameters:
+            verbose (bool): Print loading progress
+        """
+        if not self.spectra_assignments:
+            raise RuntimeError("No spectra assigned. Use assign_spectra() first.")
+        
+        self.spectra_data = {}
+        self.wavelength_grid = None
+        
+        for codec_id in sorted(self.spectra_assignments.keys()):
+            if verbose:
+                print(f"Loading spectrum for codec_id {codec_id}...", end=" ")
+            
+            wavelength, flux = self.load_spectrum(codec_id)
+            self.spectra_data[codec_id] = (wavelength, flux)
+            
+            # Verify wavelength grid consistency
+            if self.wavelength_grid is None:
+                self.wavelength_grid = wavelength
+            else:
+                if not np.allclose(wavelength, self.wavelength_grid):
+                    raise ValueError(
+                        f"Wavelength grid mismatch for codec_id {codec_id}. "
+                        f"All spectra must share the same wavelength grid."
+                    )
+            
+            if verbose:
+                print(f"✓ ({len(wavelength)} points)")
+        
+        if verbose:
+            print(f"\nLoaded {len(self.spectra_data)} spectra")
+            print(f"Wavelength range: {self.wavelength_grid[0]:.3f} - {self.wavelength_grid[-1]:.3f} μm")
+
+    def calculate_composite_spectrum(self, fractions, normalize=False):
+        """
+        Compute weighted sum of spectra based on fractional areas.
+        
+        Parameters:
+            fractions (dict): {codec_id: fractional_area, ...}
+            normalize (bool): If True, normalize fractions to sum to 1.0
+        
+        Returns:
+            tuple: (wavelength, composite_flux) as numpy arrays
+        
+        Example:
+            >>> fractions = codec.calculate_spectral_fractions(composite_image)
+            >>> wave, flux = codec.calculate_composite_spectrum(fractions)
+        """
+        if not hasattr(self, 'spectra_data') or not self.spectra_data:
+            raise RuntimeError("No spectra loaded. Call load_all_spectra() first.")
+        
+        # Handle detailed fractions dict format
+        if isinstance(fractions, dict) and 'fractions' in fractions:
+            fractions = fractions['fractions']
+        
+        # Verify all codec_ids have loaded spectra
+        missing = set(fractions.keys()) - set(self.spectra_data.keys())
+        if missing:
+            raise ValueError(f"Missing spectra for codec_ids: {missing}")
+        
+        # Normalize fractions if requested
+        if normalize:
+            total = sum(fractions.values())
+            if total > 0:
+                fractions = {k: v/total for k, v in fractions.items()}
+        
+        # Initialize composite flux
+        composite_flux = np.zeros_like(self.wavelength_grid)
+        
+        # Weighted sum
+        for codec_id, fraction in fractions.items():
+            _, flux = self.spectra_data[codec_id]
+            composite_flux += fraction * flux
+        
+        return self.wavelength_grid, composite_flux
+
+    def calculate_composite_spectra_timeseries(self, time_series_results, 
+                                            save_dir=None, verbose=True):
+        """
+        Calculate composite spectra for all frames in a time series.
+        
+        Parameters:
+            time_series_results (list): Output from process_time_series()
+            save_dir (str, optional): Directory to save individual spectra
+            verbose (bool): Print progress
+        
+        Returns:
+            list: [(frame_idx, wavelength, flux), ...] for each frame
+        """
+        if not hasattr(self, 'spectra_data') or not self.spectra_data:
+            raise RuntimeError("No spectra loaded. Call load_all_spectra() first.")
+        
+        composite_spectra = []
+        
+        for i, result in enumerate(time_series_results):
+            if verbose and i % 10 == 0:
+                print(f"Computing composite spectrum for frame {i+1}/{len(time_series_results)}")
+            
+            frame_idx = result['frame']
+            fractions = result['fractions']
+            
+            # Calculate composite spectrum
+            wavelength, flux = self.calculate_composite_spectrum(fractions)
+            
+            composite_spectra.append((frame_idx, wavelength, flux))
+            
+            # Optionally save to file
+            if save_dir is not None:
+                os.makedirs(save_dir, exist_ok=True)
+                output_file = os.path.join(save_dir, f"composite_frame_{frame_idx:04d}.csv")
+                np.savetxt(
+                    output_file,
+                    np.column_stack((wavelength, flux)),
+                    delimiter=",",
+                    header="wavelength_um,flux_erg/cm2/s/hz",
+                    comments="")
+        
+        if verbose:
+            print(f"Computed {len(composite_spectra)} composite spectra")
+            if save_dir:
+                print(f"Saved to: {save_dir}")
+        
+        return composite_spectra
+
+    # ======= Saving and Loading Output Imags and Spectra ======
+    def save_codec_images_h5(self, results, filepath):
+        """
+        Save time series processing results to HDF5 file with compression.
+        Parameters:
+            results (list): List of dictionaries from process_time_series():
+                [
+                    {'frame': 0, 'composite': array, 'fractions': {...}},
+                    {'frame': 1, 'composite': array, 'fractions': {...}},
+                    ...
+                ]
+            filepath (str): Output file path (should end in .h5)
+        """
+        def convert_to_serializable(obj):
+            """Convert numpy types to native Python types for JSON serialization"""
+            if isinstance(obj, dict):
+                return {convert_to_serializable(k): convert_to_serializable(v) 
+                        for k, v in obj.items()}
+            elif isinstance(obj, (np.integer, np.int64, np.int32)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            else:
+                return obj
+        
+        with h5py.File(filepath, 'w') as f:
+            # Store metadata
+            f.attrs['n_frames'] = len(results)
+            f.attrs['description'] = 'Time series processing results'
+            
+            # Save each frame with compression
+            for i, result in enumerate(results):
+                group = f.create_group(f'frame_{i}')
+                
+                # Store frame index
+                group.create_dataset('frame_index', data=result['frame'])
+                
+                # Store composite image with compression
+                group.create_dataset(
+                    'composite',
+                    data=result['composite'],
+                    compression='gzip',
+                    compression_opts=4
+                )
+                
+                # Convert fractions to serializable format and store as JSON string
+                fractions_serializable = convert_to_serializable(result['fractions'])
+                fractions_json = json.dumps(fractions_serializable)
+                group.create_dataset('fractions', data=fractions_json)
+
+    def load_codec_images_h5(filepath, frame_index=None):
+        """
+        Load time series processing results from HDF5 file.
+        
+        Parameters:
+            filepath (str): Path to HDF5 file
+            frame_index (int, optional): If specified, load only this frame
+        
+        Returns:
+            If frame_index is None: list of result dictionaries
+            If frame_index is specified: single result dictionary
+        """
+        def load_single_frame(f, idx):
+            """Helper to load a single frame from open file handle"""
+            group = f[f'frame_{idx}']
+            
+            # Load fractions from JSON string
+            fractions_json = group['fractions'][()]
+            if isinstance(fractions_json, bytes):
+                fractions_json = fractions_json.decode('utf-8')
+            fractions = json.loads(fractions_json)
+            
+            return {
+                'frame': int(group['frame_index'][()]),
+                'composite': group['composite'][:],
+                'fractions': fractions
+            }
+        
+        with h5py.File(filepath, 'r') as f:
+            if frame_index is not None:
+                # Load single frame
+                return load_single_frame(f, frame_index)
+            else:
+                # Load all frames
+                n_frames = f.attrs['n_frames']
+                results = []
+                for i in range(n_frames):
+                    results.append(load_single_frame(f, i))
+                return results
+
+    def save_composite_spectrum(self, wavelength, flux, filepath):
+        """
+        Save composite spectrum to CSV file in the same format as input.
+        
+        Parameters:
+            wavelength (array): Wavelength array
+            flux (array): Flux array
+            filepath (str): Output file path
+        """
+        np.savetxt(
+            filepath,
+            np.column_stack((wavelength, flux)),
+            delimiter=",",
+            header="wavelength_um,flux_erg/cm2/s/hz",
+            comments="")
+
+    def save_composite_spectra_timeseries(self, composite_spectra_ts, filepath):
+        """
+        Save composite spectra time series to HDF5 file with compression.
+        Parameters: filepath (str): Output file path (should end in .h5)
+        
+        The HDF5 file structure:
+            - Each frame is stored as a group named 'frame_0', 'frame_1', etc.
+            - Each group contains: 'time', 'wavelength', 'flux' datasets
+
+        """
+        with h5py.File(filepath, 'w') as f:
+            # Store metadata
+            f.attrs['n_frames'] = len(composite_spectra_ts)
+            f.attrs['description'] = 'Composite spectra time series'
+            
+            # Save each frame with compression
+            for i, (frame_time, wave_array, flux_array) in enumerate(composite_spectra_ts):
+                group = f.create_group(f'frame_{i}')
+                
+                # Store time as scalar
+                group.create_dataset('time', data=frame_time)
+                # Store wavelength and flux with gzip compression
+                group.create_dataset('wavelength', data=wave_array, compression='gzip', compression_opts=4)
+                group.create_dataset('flux', data=flux_array, compression='gzip', compression_opts=4)
+    
+    def load_spectra_ts_h5(filepath, frame_index=None):
+        """
+        Load composite spectra time series from HDF5 file.
+        Parameters:
+            filepath (str): Path to HDF5 file
+            frame_index (int, optional): If specified, load only this frame
+            If frame_index is None: list of [frame_time, wave_array, flux_array]
+        """
+        with h5py.File(filepath, 'r') as f:
+            if frame_index is not None:
+                # Load single frame
+                group = f[f'frame_{frame_index}']
+                return {
+                    'time': group['time'][()],
+                    'wave': group['wavelength'][:],
+                    'flux': group['flux'][:]
+                }
+            else:
+                # Load all frames
+                n_frames = f.attrs['n_frames']
+                composite_spectra_ts = {}
+                for i in range(n_frames):
+                    group = f[f'frame_{i}']
+                    composite_spectra_ts[i] = {
+                        'time': group['time'][()],
+                        'wave': group['wavelength'][:],
+                        'flux': group['flux'][:]
+                    }
+                return composite_spectra_ts
+
+    def get_spectra_info(self):
+        """
+        Get summary information about loaded spectra.
+        Returns:
+            dict: Summary statistics
+        """
+        if not hasattr(self, 'spectra_data') or not self.spectra_data:
+            return {"status": "No spectra loaded"}
+        
+        # Calculate flux statistics for each spectrum
+        flux_stats = {}
+        for codec_id, (wave, flux) in self.spectra_data.items():
+            flux_stats[codec_id] = {
+                'mean': float(np.mean(flux)),
+                'min': float(np.min(flux)),
+                'max': float(np.max(flux)),
+                'std': float(np.std(flux))
+            }
+        
+        return {
+            'n_spectra': len(self.spectra_data),
+            'n_wavelength_points': len(self.wavelength_grid),
+            'wavelength_range': (float(self.wavelength_grid[0]), 
+                                float(self.wavelength_grid[-1])),
+            'flux_statistics': flux_stats
+        }
+
+    # ========== Helper Methods ==========
+    
+    def _serialize_codec_definitions(self):
+        """Convert codec_definitions to JSON-serializable format."""
+        serialized = {}
+        for name, defn in self.codec_definitions.items():
+            serialized[name] = {
+                'max_value': defn['max_value'],
+                'values': defn['values'],
+                'description': defn['description']
+            }
+        return serialized
+    
+    def _determine_target_shape(self, shapes, policy='largest'):
+        """
+        Determine target shape for mismatched arrays.
+        
+        Parameters:
+            shapes (list): List of tuples
+            policy: 'largest', 'smallest', 'most_common', or tuple
+        
+        Returns:
+            tuple: Target (height, width)
+        """
+        if policy == 'largest':
+            return tuple(max(s[i] for s in shapes) for i in range(2))
+        
+        elif policy == 'smallest':
+            return tuple(min(s[i] for s in shapes) for i in range(2))
+        
+        elif policy == 'most_common':
+            return Counter(shapes).most_common(1)[0][0]
+        
+        elif isinstance(policy, tuple):
+            return policy
+        
+        else:
+            raise ValueError(f"Unknown policy: {policy}")
+    
+    def _align_arrays(self, codec_arrays, target_shape, method='nearest', 
+                     warn_threshold=2.0):
+        """
+        Resize all arrays to target shape.
+        
+        Parameters:
+            codec_arrays (dict): {name: 2D_array}
+            target_shape (tuple): (height, width)
+            method (str): 'nearest' (order=0) for discrete values
+            warn_threshold (float): Warn if downsampling by this factor
+        
+        Returns:
+            dict: Resized arrays
+        """
+        aligned = {}
+        for name, array in codec_arrays.items():
+            if array.shape == target_shape:
+                aligned[name] = array
+                continue
+            
+            # Calculate zoom factors
+            zoom_factors = (target_shape[0] / array.shape[0],
+                           target_shape[1] / array.shape[1])
+            
+            # Warn if significant downsampling
+            min_zoom = min(zoom_factors)
+            if min_zoom < (1.0 / warn_threshold):
+                print(f"  WARNING: Downsampling '{name}' by {1/min_zoom:.1f}x "
+                      f"({array.shape} → {target_shape})")
+            
+            # Resize using nearest neighbor to preserve discrete values
+            aligned[name] = zoom(array, zoom_factors, order=0)
+        
+        return aligned
+
+# Import your existing readPhotometry function
+def readPhotometry(targetPath):
+    """Read photometry data: gray_array, specmask, metadata, time_array."""
+    results = {}
+    with h5py.File(targetPath, 'r') as f:
+        for inclin in f.keys():
+            data = f[inclin]
+            results[inclin] = {
+                'gray_array': data['gray_array'][:],
+                'specmask': data['specmask'][:],
+                'metadata': json.loads(data['metadata'][()].decode('utf-8')),
+                'time_array': data['time_array'][:]
+            }
+    return results
+
+def generate_bins(a, b, nbin, type='linear', power=2):
+    """Generate bins with power-law spacing."""
+    if type == 'linear':
+        bins = np.linspace(a, b, nbin)
+        bins[0] = bins[0]*0.8 # Slightly extend the first bin
+        bins[-1] = bins[-1]*1.2 # Slightly extend the last bin
+    elif type == 'power':
+        t = np.linspace(0, 1, nbin)
+        normalized = t ** power
+        bins = a + normalized * (b - a)
+    return [0] + bins.tolist() 
+
+def digitize_frames(results, bins):
+    """Digitize all frames in gray_array for each inclination."""
+    for inclin in results.keys():
+        gray_array = results[inclin]['gray_array']
+        # select the gray_array at 90% circular radii
+         
+        digitized = np.digitize(gray_array, bins, right=True)
+        results[inclin]['digitized'] = digitized
+
+def derive_feature_type_map(specmask, speckey, target_labels=('B1', 'B4'),
+                             other_value=1, target_value=2, tolerance=None):
+    """
+    Build a static 'feature_type' codec array from a rendered specmask,
+    routing specific per-instance band labels (e.g. the two mid-latitude
+    bands flanking the poles, 'B1' and 'B4') to a different spectra folder
+    than everything else.
+
+    This assumes AtmosphereGenerator.py's per-instance band labeling
+    (band_labels / speckey keyed by 'B1'..'B4', 'P1'/'P2', 'A', 'BG' --
+    see AtmosphericConfig._sort_and_label_bands / _default_speckey).
+    specmask pixel VALUES are matched against speckey[label] with a
+    tolerance, not against label strings directly, since specmask stores
+    the numeric speckey values baked in at render time.
+
+    Parameters:
+        specmask (2D array): posterized specmask for ONE inclination
+            (results[inclin]['specmask'])
+        speckey (dict): {label: numeric_value, ...} for that SAME
+            inclination's run, i.e. results[inclin]['metadata']['speckey'].
+            Pull it from metadata rather than hardcoding, since the actual
+            numeric values depend on how many bands/poles this particular
+            band_config has.
+        target_labels (tuple of str): band_labels to route to
+            `target_value` (default: ('B1', 'B4'), the two bands
+            immediately flanking the poles in a 4-band north/south config)
+        other_value (int): codec value for every non-background pixel NOT
+            in target_labels (default 1 -> "folder A", e.g. fsed=1-1.2)
+        target_value (int): codec value for pixels matching target_labels
+            (default 2 -> "folder B", e.g. fsed=2-2.2)
+        tolerance (float, optional): matching tolerance around each
+            speckey value. If None, derived automatically from the
+            smallest gap between neighboring speckey values -- this
+            mirrors AtmosphereGenerator.LightcurveGenerator._matching_tolerance
+            so the two pipelines can't disagree about where region
+            boundaries sit.
+
+    Returns:
+        feature_map (2D int array), same shape as specmask:
+            0   at true background (speckey['BG'], which is pinned to 0 --
+                see AtmosphericConfig._default_speckey), so
+                create_composite_image's `array == 0` exclusion rule keeps
+                working regardless of what else is going on in this array
+            target_value at pixels matching any of target_labels
+            other_value  everywhere else
+    """
+    if tolerance is None:
+        values = sorted(speckey.values())
+        if len(values) > 1:
+            min_gap = min(b - a for a, b in zip(values[:-1], values[1:]))
+            tolerance = max(1.0, min_gap / 2.0 - 1.0)
+        else:
+            tolerance = 1.0
+
+    missing = [lab for lab in target_labels if lab not in speckey]
+    if missing:
+        raise KeyError(
+            f"target_labels {missing} not found in speckey "
+            f"(available: {sorted(speckey.keys())}). This band_config may "
+            f"not have enough bands to contain both requested labels -- "
+            f"check band_labels for this run before assuming B1/B4 exist."
+        )
+
+    feature_map = np.full(specmask.shape, other_value, dtype=np.int32)
+
+    # Background stays exactly 0 no matter what, so it can never be
+    # mistaken for 'other_value' region A -- codec.py's background
+    # exclusion (`array == 0`) depends on this.
+    if 'BG' in speckey:
+        bg_mask = np.abs(specmask - speckey['BG']) <= tolerance
+        feature_map[bg_mask] = 0
+
+    for label in target_labels:
+        match_mask = np.abs(specmask - speckey[label]) <= tolerance
+        feature_map[match_mask] = target_value
+
+    return feature_map
+
+def plot_variability_map(composite_spectra_ts, time_array, wave_bin=0.1, t_min=0.0, t_max=10.0,
+                          wave_range=None, inclin=None, cmap='RdBu_r', save_path=None, figshape=(8, 5)):
+    """
+    Build and plot a time-vs-wavelength variability map from a composite
+    spectra time series.
+ 
+    Bins flux into `wave_bin`-wide wavelength bins, keeps only frames with
+    time <= t_max, and plots each bin's percent deviation from its own
+    time-mean flux -- i.e. how much a given wavelength's flux varies over
+    the selected time window, as a 2D (time, wavelength) map.
+ 
+    Parameters:
+        composite_spectra_ts (list): output of
+            codec.calculate_composite_spectra_timeseries(), i.e.
+            [(frame_idx, wavelength_array, flux_array), ...]
+        time_array (array): time in hours for each frame, aligned by
+            position with composite_spectra_ts (e.g.
+            results[inclin]['time_array'])
+        wave_bin (float): wavelength bin width in microns (default 0.1 um)
+        t_max (float): only include frames with time <= t_max hours
+            (default 10.0)
+        wave_range (tuple, optional): (a, b) in microns -- restrict the
+            plotted/binned wavelength axis to this region. If None
+            (default), uses the full wavelength grid. Points outside the
+            range are excluded from binning entirely (not clamped into
+            the edge bins).
+        inclin (str, optional): inclination label, used only in the title
+        cmap (str): diverging colormap name, since variability is signed
+        save_path (str, optional): if given, save the figure here
+ 
+    Returns:
+        fig, ax, wave_centers, time_sel, variability
+            wave_centers (1D array): center wavelength of each bin
+            time_sel (1D array): selected times (hours, <= t_max)
+            variability (2D array, shape (n_time, n_wave_bins)): percent
+                deviation of binned flux from its own time-mean
+    """
+    time_array = np.asarray(time_array)
+    # add t_min and t_max filters
+    time_mask = (time_array >= t_min) & (time_array <= t_max)
+    if not np.any(time_mask):
+        raise ValueError(f"No frames found with time between {t_min} and {t_max} hours")
+
+    # All frames share the same wavelength grid (enforced upstream by
+    # load_all_spectra's grid-consistency check), so bin edges only need
+    # to be computed once from the first frame.
+    wave_full = composite_spectra_ts[0][1]
+ 
+    if wave_range is not None:
+        a, b = wave_range
+        if a >= b:
+            raise ValueError(f"wave_range must be (a, b) with a < b, got {wave_range}")
+        wmin, wmax = max(a, wave_full.min()), min(b, wave_full.max())
+        if wmin >= wmax:
+            raise ValueError(
+                f"wave_range {wave_range} does not overlap the available "
+                f"wavelength grid ({wave_full.min():.3f}-{wave_full.max():.3f} um)"
+            )
+    else:
+        wmin, wmax = wave_full.min(), wave_full.max()
+ 
+    n_bins = max(1, int(np.ceil((wmax - wmin) / wave_bin)))
+    bin_edges = wmin + wave_bin * np.arange(n_bins + 1)
+    bin_edges[-1] = wmax + 1e-9  # ensure the last wavelength point is included
+    wave_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+ 
+    binned_flux, time_sel = [], []
+    for (frame_idx, wave_i, flux_i), t, keep in zip(composite_spectra_ts, time_array, time_mask):
+        if not keep:
+            continue
+        # Restrict to [wmin, wmax] BEFORE digitizing so out-of-range
+        # points are excluded rather than clamped into the edge bins.
+        in_range = (wave_i >= wmin) & (wave_i <= wmax)
+        wave_i, flux_i = wave_i[in_range], flux_i[in_range]
+ 
+        bin_idx = np.clip(np.digitize(wave_i, bin_edges) - 1, 0, n_bins - 1)
+        row = np.array([
+            flux_i[bin_idx == b].mean() if np.any(bin_idx == b) else np.nan
+            for b in range(n_bins)
+        ])
+        binned_flux.append(row)
+        time_sel.append(t)
+ 
+    binned_flux = np.array(binned_flux)  # shape (n_time, n_wave_bins)
+    time_sel = np.array(time_sel)
+
+    mean_flux = np.nanmean(binned_flux, axis=0, keepdims=True)
+    variability = 100.0 * (binned_flux - mean_flux) / mean_flux  # % deviation
+ 
+    fig, ax = plt.subplots(figsize=figshape, dpi=300)
+    vmax = np.nanmax(np.abs(variability))
+    mesh = ax.pcolormesh(wave_centers, time_sel, variability,
+                          shading='nearest', cmap=cmap, vmin=-vmax, vmax=vmax)
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label('Variability (% deviation from time-mean flux)')
+    ax.set_xlabel('Wavelength (μm)')
+    ax.set_ylabel('Time (hours)')
+    title = 'Spectral Variability Map'
+    if inclin is not None:
+        title += f' (i={inclin})'
+    ax.set_title(title)
+    plt.tight_layout()
+ 
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Saved variability map to {save_path}")
+ 
+    return fig, ax, wave_centers, time_sel, variability
+
+# ===== DEMO USAGE =====
+
+if __name__ == "__main__":
+    # Load your data
+    photometryh5dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
+    
+    ### test static/dynamic
+    photrunName = 'test_polar_v0_static.h5' # used for complex fsed test as well
+    # photrunName = 'test_polar_v0_dynamic.h5'
+
+    # photrunName = 'test_polar_v1_static.h5'
+    # photrunName = 'test_polar_v1_dynamic.h5'
+
+    # photrunName = 'test_polar_v2_static.h5'
+    # photrunName = 'test_polar_v2_dynamic.h5'
+
+    ### test with individual-band naming speckey B1/B2/etc.abs
+    # photrunName = 'test_polar_v3_static.h5'
+    # photrunName = 'test_polar_v4_static.h5'
+    # photrunName = 'test_polar_v5_static.h5'
+    photrunName = 'test_polar_v6_static.h5'
+
+    ### polar long-baseline static/dyamic
+    # photrunName = 'polar_v1_static_baseline120.h5' # not used in paper
+
+    ### test onlyVortex static/dynamic 
+    # photrunName = 'test_onlyVortex_v0_static.h5' 
+    # photrunName = 'test_onlyVortex_v0_dynamic1.h5' 
+    # photrunName = 'test_onlyVortex_v0_dynamic2.h5' 
+
+    ### jwst static/dynamic
+    # photrunName = 'jwst_v1_static.h5'
+
+    # photrunName = 'jwst_v0_static.h5' # not used in paper
+    # photrunName = 'jwst_v0_dynamic.h5' # not used in paper
+
+    path = os.path.join(photometryh5dir, photrunName)
+    results = readPhotometry(path)
+
+    ### Simple fsed, n=20
+    # specConfigName = f'1200K_clouds=20'
+    specConfigName = f'c1200K_clouds=20'
+    
+    ### specFolderName = 'bd_grid_20251108_162457_all5condensates'
+    ### specFolderName = 'bd_grid_20251202_simple3clouds'
+    # specFolderName = 'bd_grid_noCH4_20251209_153457'
+
+    specFolderName = 'bd_grid_withCH4_fsed=2.0_n=20_R=300_20260729_221227'
+    n = 20
+    
+    ### Simple fsed, n=50
+    # specConfigName = f'1200K_clouds=50_newSpec1_logg2e4'
+    # #### specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
+    # specFolderName = 'bd_grid_noCH4_n=50_R=300_20260504_182749'
+    # n = 50
+
+    ### Comlex fsed per species, n=20
+    # # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
+    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg1e4'
+    # # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=50_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_131706'
+    # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=20_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_161919'
+    # n = 20
+    # # n = 50
+    
+    runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
+
+    print("\n===== CODEC PROCESSING =====")
+    print(f"Running photometry configuration: {runname}")
+
+    if False:
+        runname += f'_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+
+    runpath = os.path.join(os.getcwd(), runname)
+    if not os.path.exists(runpath):
+        os.makedirs(runpath)
+    
+    # ===== Generate bins and digitize =======
+    cl1, cl2 = results['30']['metadata']['colorlim']
+    Fpolar_var = results['30']['metadata']['Fpolar_var']
+    Fband_var = results['30']['metadata']['Fband_var']
+    Fvortex_var = 0.15 # Fixed vortex variation for all runs
+    var = max(Fpolar_var, Fband_var, Fvortex_var)
+    v1, v2 = 1 - var, 1 + var
+    slope = 255/(cl2 - cl1)
+    intercept = 0 - slope * cl1
+    a, b = slope*v1 + intercept, slope*v2 + intercept
+    bins = generate_bins(a, b, nbin=n, type='linear')
+    digitize_frames(results, bins)
+    
+    # ===== STEP 1: Initialize Codec System =====
+    print("\n### STEP 1: Initialize Codec System ###")
+    codec = CodecSystem()
+    
+    ### Search for .csv files in the specified directory
+    dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/'
+
+    specpath = os.path.join(dir, specFolderName)
+    specSummary = pickle.load(open(os.path.join(specpath, 'results_summary.pkl'), 'rb'))
+
+    modelID_list = [picasomodelfile['model_id'] for picasomodelfile in specSummary]
+    print(f"\nFound {len(modelID_list)} model IDs in the summary:")
+    print(modelID_list)
+    print("\nSample params file: ")
+    print(specSummary[0]['params'])
+    
+    csv_files = sorted([os.path.join(specpath, f) for f in os.listdir(specpath) if f.endswith('.csv')])
+    print(f"Found {len(csv_files)} .csv files in {specpath}")
+    csv_files_A = csv_files  # folder A, fsed=1-1.2 -- used for every region
+                              # EXCEPT the two mid-latitude bands flanking
+                              # the poles (B1, B4)
+
+    # ===== STEP 1b: Load the second (B1/B4) spectra folder =====
+    # Folder B -> fsed=2-2.2, used ONLY for the B1/B4 pixels identified via
+    # specmask below. Point this at your actual fsed=2-2.2 grid directory.
+    
+    specFolderName_B = 'bd_grid_withCH4_fsed=3.0_n=20_R=300_20260729_223003'
+    # specFolderName_B = 'bd_grid_withCH4_fsed=4.0_n=20_R=300_20260729_222047'
+
+    specpath_B = os.path.join(dir, specFolderName_B)
+    specSummary_B = pickle.load(open(os.path.join(specpath_B, 'results_summary.pkl'), 'rb'))
+    csv_files_B = sorted([os.path.join(specpath_B, f) for f in os.listdir(specpath_B) if f.endswith('.csv')])
+    print(f"Found {len(csv_files_B)} .csv files in {specpath_B} (folder B, fsed=2-2.2)")
+    if len(csv_files_B) != n:
+        raise ValueError(
+            f"Folder B has {len(csv_files_B)} spectra but folder A / n={n} "
+            f"has {len(csv_files_A)} -- cloud_thickness codec values (the "
+            f"digitized fsed bin index) are reused across both folders, so "
+            f"they must have matching, correspondingly-ordered counts."
+        )
+
+    # Add two codec dimensions:
+    #   feature_type: which spectra folder a pixel draws from
+    #     1 = 'other' regions (all B_i except B1/B4, all P_i, A) -> folder A
+    #     2 = B1/B4 mid-latitude bands flanking the poles         -> folder B
+    #   cloud_thickness: which fsed level within that folder (same
+    #     digitized bin index 0..n-1 reused for both folders)
+    codec.add_codec_type('feature_type', values=[1, 2],
+                        description='1=other regions (folder A, fsed~1-1.2); '
+                                     '2=B1/B4 mid-latitude bands (folder B, fsed~2-2.2)')
+    codec.add_codec_type('cloud_thickness', max_value=n, 
+                        description='Cloud optical depth levels')
+    codec.generate_combinations() # Generate all feature_type x cloud_thickness combinations
+    
+    # ===== STEP 2: Assign Spectra (per feature_type x cloud_thickness) =====
+    for i in range(1, n + 1):
+        codec.assign_spectra(codec.get_codec_id(feature_type=1, cloud_thickness=i),
+                            csv_files_A[i - 1], validate=True)
+        codec.assign_spectra(codec.get_codec_id(feature_type=2, cloud_thickness=i),
+                            csv_files_B[i - 1], validate=True)
+    print(f"Assigned {len(codec.spectra_assignments)} spectra files "
+        f"({n} from folder A + {n} from folder B)")
+    
+    print("\n### Loading Spectra ###")
+    codec.load_all_spectra(verbose=True) # Load all spectra into memory 
+
+    print("\nCodec combinations:")
+    for i in range(len(codec.combination_map)):  # now 2n: feature_type x cloud_thickness
+        codec.print_combination(i)
+
+    # ===== Export/Import Configuration =====
+    configPath = os.path.join(runpath, 'codec_config.json')
+    codec.export_mapping(configPath)
+    # Test import
+    codec_loaded = CodecSystem()
+    codec_loaded.import_mapping(configPath, validate_files=False)
+    
+    #%%
+    # ===== Process Time Series for All Inclination =====
+    print("\n### Processing Time Series ###")
+    
+    for inclin in results.keys():
+    # for inclin in ['0', '40']:
+        results_ts = None
+
+        # Build the static feature_type map for THIS inclination from its
+        # own rendered specmask (projection/inclination changes which
+        # pixels land where, so this can't be shared across inclinations).
+        # B1/B4 -> folder B; everything else (B2/B3, P1/P2, A) -> folder A.
+        feature_type_map = derive_feature_type_map(
+            results[inclin]['specmask'],
+            results[inclin]['metadata']['speckey'],
+            target_labels=('B1', 'B4'))
+
+        # Calculate Composite Spectra for All Frames
+        results_ts = codec.process_time_series(
+            time_variant_codecs={
+                'cloud_thickness': results[inclin]['digitized']
+            },
+            time_constant_codecs={
+                'feature_type': feature_type_map
+            },
+            frames=range(0, len(results[inclin]['digitized'])),
+            verbose=False)
+        # Save the codecs images time series
+        codecPath = os.path.join(runpath, f'codec_images_i={inclin}.h5')
+        codec.save_codec_images_h5(results_ts, codecPath)
+
+        # Calculating Composite Spectra Time Series
+        composite_spectra_ts = codec.calculate_composite_spectra_timeseries(
+            results_ts, verbose=False)
+
+        spectsPath = os.path.join(runpath, f'composite_spectra_i={inclin}.h5')
+        # Save the spectra timeseries
+        codec.save_composite_spectra_timeseries(composite_spectra_ts, spectsPath)
+        
+        # ===== Visualization: Compare Individual vs Composite =====
+        print("\n### Visualizing Spectra ###")
+
+        fig, axes = plt.subplots(3, 2, figsize=(10, 12))
+
+        # ===== Plot 1: All individual spectra =====
+        ax = axes[0, 0]
+        for codec_id in range(n):  # Plot all codec
+            wave_i, flux_i = codec.load_spectrum(codec_id)
+            ax.plot(wave_i, flux_i, alpha=1, lw=0.5, label=f'Codec {codec_id}')
+        ax.set_xlabel('Wavelength (μm)')
+        ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+        ax.set_title(f'Individual Spectra: {n} fseds')
+        # ax.legend(fontsize=5)
+        ax.set_yscale('linear')
+        ax.grid(True, alpha=0.3)
+
+        # ===== Plot 2: Light curves for specific wavelength bin =====
+        ax = axes[0,1]
+
+        # Define wavelength bins
+        wavebin = [(1.3, 1.4, 'red'),]
+                # (2.4, 2.5, 'blue'),]
+
+        # Extract light curves for each bin
+        for wmin, wmax, color in wavebin:
+            flux_timeseries = []
+            time_indices = results[inclin]['time_array']
+            
+            for frame_i, wave_i, flux_i in composite_spectra_ts:
+                # Find wavelength indices in the bin
+                mask = (wave_i >= wmin) & (wave_i <= wmax)
+                if np.sum(mask) > 0:
+                    # Calculate median flux in this bin
+                    median_flux = np.median(flux_i[mask])
+                    flux_timeseries.append(median_flux)
+            
+            # Plot light curve
+            ax.plot(time_indices, flux_timeseries, 
+                    marker='o', linestyle='-', color=color,
+                    alpha=0.7, 
+                    linewidth=1, markersize=2,
+                    label=f'{wmin}-{wmax} μm')
+
+            tmax = np.argmax([np.mean(flux_i) for _, _, flux_i in composite_spectra_ts])
+            tmin = np.argmin([np.mean(flux_i) for _, _, flux_i in composite_spectra_ts])
+            tmid = len(composite_spectra_ts) // 2
+
+            # Highlight specific timepoint
+            for i,xid in enumerate([tmax, tmid, tmin]):
+                color_list = ['orange', 'green', 'purple']
+                ax.plot(time_indices[xid], flux_timeseries[xid], ls='', 
+                        marker='*', markersize=10, color=color_list[i],)
+
+        ax.set_xlabel('Frame Index')
+        ax.set_ylabel('Median Flux (erg/cm²/s/Hz)')
+
+        ax.set_title(f'Light Curves for Selected Wavelength Bins; i={inclin}')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('linear')
+
+        # ===== Plot 3: Fractional contributions =====
+
+        # Process a Single Frame for Reference
+        print(f"\n### Processing Single Frame; i={inclin} ###")
+        frame_idx = 0
+        composite = codec.create_composite_image(
+            cloud_thickness=results[inclin]['digitized'][frame_idx],
+            feature_type=feature_type_map
+        )
+        fractions = codec.calculate_spectral_fractions(composite, detailed=True)
+        # wave, flux = codec.calculate_composite_spectrum(fractions)
+
+        ax = axes[1, 0]
+        codec_ids = list(fractions['fractions'].keys())
+        frac_values = list(fractions['fractions'].values())
+        ax.bar(codec_ids, frac_values)
+        ax.set_xlabel('Codec ID')
+        ax.set_xticks(codec_ids[::2])  # Show every other tick
+        ax.set_ylabel('Fractional Area')
+        ax.set_title(f'Fractional Contributions (Frame {frame_idx}); i={inclin}')
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # ### ===== Add inset atm images to axes[1, 1] ======
+        # inset_ax = ax.inset_axes([0.05, 0.3, 0.17*1.95, 0.25*2])  # [x, y, width, height]
+        # inset_ax.imshow(results_ts[15]['composite'], cmap='plasma', aspect='auto')
+        # inset_ax.set_xticks([])
+        # inset_ax.set_yticks([])
+        # inset_ax.set_title('Clouds-codec', fontsize=8)
+
+        # ===== Plot 4: Composite spectra evolution over time =====
+        ax = axes[1, 1]
+        # for i in range(0, len(composite_spectra_ts), 10):  # Every 10th frame
+        #     frame_i, wave_i, flux_i = composite_spectra_ts[i]
+        #     ax.plot(wave_i, flux_i, alpha=1.0, lw=0.5, label=f'Frame {frame_i}')
+
+        frameA, waveA, fluxA = composite_spectra_ts[tmax]
+        frameB, waveB, fluxB = composite_spectra_ts[tmid]
+        frameC, waveC, fluxC = composite_spectra_ts[tmin]
+
+        ax.plot(waveA, fluxA/fluxB, lw=1, label=f'max / mid')
+        ax.plot(waveA, fluxA/fluxC, lw=1, label=f'max / min')
+        ax.plot(waveA, fluxB/fluxC, lw=1, label=f'mid / min')
+
+        ax.set_xlabel('Wavelength (μm)')
+        ax.set_ylabel('Flux (erg/cm²/s/Hz)')
+        ax.set_title(f'Composite Spectra Ratio; i={inclin}')
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3)
+        # ax.set_ylim(1.0, 1.10)
+
+        # ===== Plot 5: Periodogram of second lightcurve in hours x-axis =====
+        ax = axes[2, 0]
+
+        from PyAstronomy.pyTiming import pyPeriod
+        freqs = np.linspace(0.01, 1, 1000) 
+        flux_timeseries = np.array(flux_timeseries)
+        lombscargle = pyPeriod.Gls(# (time, flux, flux_err)
+            (time_indices, flux_timeseries, 0.001*flux_timeseries), freq=freqs)
+
+        period = 1/lombscargle.freq
+        power = lombscargle.power
+
+        fap = 0.1 # false alarm probability
+        fapLevel = lombscargle.powerLevel(fap)
+
+        # Plot the periodogram
+        ax.plot(period, power, color='purple')
+        ax.axhline(fapLevel, color='red', ls='--', 
+                    lw=0.5, label=f'FAP={fap}')
+        ax.set_xlabel('Period (hour)')
+        ax.set_ylabel('Power')
+        ax.set_title('Periodogram of Flux Timeseries')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+
+        # ===== Plot 6: 2x2 images at t=0, 10, 20, 30
+        ax = axes[2, 1]
+        timepoints = [3, 11, 32, 67]
+        n_tp = len(timepoints)
+        for i, tp in enumerate(timepoints):
+            img = results_ts[tp]['composite']
+            sub_ax = ax.inset_axes([
+            0.05 + (i % 2) * 0.47, 
+            0.55 - (i // 2) * 0.47, 
+            0.4, 0.4
+            ])
+            # vmax now spans feature_type x cloud_thickness combinations
+            # (was just n when cloud_thickness was the only codec)
+            im = sub_ax.imshow(img, cmap='plasma', vmin=0,
+                                 vmax=len(codec.combination_map) - 1,
+                                 aspect='equal')  # Set aspect to 'equal'
+            sub_ax.set_xticks([])
+            sub_ax.set_yticks([])
+            sub_ax.set_title(f't={time_indices[tp]:.1f} hours', fontsize=8)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        # set all spine frames to be invisible
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+
+        # ==============================
+        plt.tight_layout()
+        handle = f'codecSummary_i={inclin}.pdf'
+        outpath = os.path.join(runpath, handle)
+        plt.savefig(outpath, dpi=150, bbox_inches='tight')
+        print("\nSaved visualization to ", handle)
+        plt.show()
+        plt.close()
+
+        # ===== Summary Statistics =====
+        print("\n### Spectra Information ###")
+        info = codec.get_spectra_info()
+        print(f"Loaded {info['n_spectra']} spectra")
+        print(f"Wavelength range: {info['wavelength_range'][0]:.3f} - {info['wavelength_range'][1]:.3f} μm")
+        print(f"Number of wavelength points: {info['n_wavelength_points']}")
+
+# %%
+inclin = '90' 
+fig, ax, wave_centers, time_sel, variability = plot_variability_map(
+    composite_spectra_ts,
+    results[inclin]['time_array'],
+    wave_bin=0.01,
+    t_min=0.0,
+    t_max=10.0,
+    wave_range=(1.00, 5.10),
+    inclin=inclin,
+    cmap='RdBu_r',
+    save_path=None,
+    figshape=(14, 2))
+# %%

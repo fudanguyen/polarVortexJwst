@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <title>Brown Dwarf Simulator — Shader</title>
     <style>
         html, body {
@@ -239,18 +240,33 @@
                 padding: 3px 10px; font-size: 11px; cursor: pointer;">
                 Ratio Mode
             </button>
-            <button onclick="computeCompositeSpectrum()" id="computeSpecBtn" style="
-                background: rgba(30, 80, 160, 0.5); color: #88ccff;
-                border: 1px solid #88ccff; border-radius: 4px;
-                padding: 3px 25px; font-size: 11px; cursor: pointer;">
-                Compute Spectra
-            </button>
+
         </div>
     </div>
  
-    <canvas id="spectrumCanvas" width="400" height="280" style="
-        background: #111; border: 1px solid #333;
-        border-radius: 4px; display: block;"></canvas>
+    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+        <label style="font-size: 11px; color: #aaa;">λ min</label>
+        <input type="number" id="lambdaMin" value="1.0" min="0.1" max="20" step="0.1" style="
+            width: 55px; background: #1a1a2e; color: white;
+            border: 1px solid #334; border-radius: 3px;
+            padding: 2px 4px; font-size: 11px;">
+        <label style="font-size: 11px; color: #aaa;">λ max</label>
+        <input type="number" id="lambdaMax" value="10.0" min="0.1" max="20" step="0.1" style="
+            width: 55px; background: #1a1a2e; color: white;
+            border: 1px solid #334; border-radius: 3px;
+            padding: 2px 4px; font-size: 11px;">
+        <label style="font-size: 11px; color: #aaa;">μm</label>
+        <button onclick="applyWavelengthRange()" style="
+            background: rgba(30,80,160,0.5); color: #88ccff;
+            border: 1px solid #88ccff; border-radius: 4px;
+            padding: 3px 10px; font-size: 11px; cursor: pointer;">
+            Apply
+        </button>
+    </div>
+
+    <div id="spectrumCanvas" style="
+        width: 400px; height: 280px; border: 1px solid #333;
+        border-radius: 4px;"></div>
  
     <div id="spectrumStatus" style="
         margin-top: 5px; font-size: 10px; color: #666;
@@ -284,50 +300,9 @@
         Export Configurations
     </h3>
 
-    <!-- ── Section 1: Simulation Config ── -->
-    <h4 style="margin: 0 0 6px 0; color: #ffaa44; font-size: 12px;">
-        Simulation Configuration
-    </h4>
     <p style="font-size: 10px; color: #666; margin: 0 0 8px 0;">
-        Select a preset or use current GUI settings for main.py
+        Exports current GUI settings as a runnable script for main.py
     </p>
-
-    <div id="simPresetButtons" style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px;">
-        <button onclick="selectSimPreset('default')" id="simBtn_default" style="
-            padding: 6px 10px; background: #1a1a2e;
-            border: 1px solid #334; border-radius: 4px;
-            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
-            🪐 Default Brown Dwarf
-            <span style="color:#666; font-size:10px; float:right;">polarStatic</span>
-        </button>
-        <button onclick="selectSimPreset('active')" id="simBtn_active" style="
-            padding: 6px 10px; background: #1a1a2e;
-            border: 1px solid #334; border-radius: 4px;
-            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
-            🌀 Active Vortices
-            <span style="color:#666; font-size:10px; float:right;">polarDynamic</span>
-        </button>
-        <button onclick="selectSimPreset('quiet')" id="simBtn_quiet" style="
-            padding: 6px 10px; background: #1a1a2e;
-            border: 1px solid #334; border-radius: 4px;
-            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
-            😶 Quiet Atmosphere
-            <span style="color:#666; font-size:10px; float:right;">polarStatic</span>
-        </button>
-        <button onclick="selectSimPreset('current')" id="simBtn_current" style="
-            padding: 6px 10px; background: #1a1a2e;
-            border: 1px solid #334; border-radius: 4px;
-            color: #ccc; cursor: pointer; font-size: 11px; text-align: left;">
-            ⚙️ Use Current GUI Settings
-            <span style="color:#666; font-size:10px; float:right;">custom</span>
-        </button>
-    </div>
-
-    <div id="simPresetDesc" style="
-        background: #1a1a2e; border: 1px solid #334;
-        border-radius: 4px; padding: 8px; margin-bottom: 8px;
-        font-size: 10px; color: #aaa; display: none; line-height: 1.5;">
-    </div>
 
     <!-- Time config options -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; font-size: 11px;">
@@ -418,6 +393,8 @@ let vortexAmp    = 0.2;
 let showVortices = true;
 let polarDynamic = false;
 let isAdvancedMode = false;
+let lambdaMin = 1.0;
+let lambdaMax = 10.0;
 
 
 // ════════════════════════════════════════════════════════════
@@ -440,6 +417,7 @@ updateCamera();
 
 document.addEventListener('mousedown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT') return;
+    if (e.target.closest('#controls, #lightCurvePanel, #codecPanel')) return;
     isDragging = true;
     prevMouseX = e.clientX;
     prevMouseY = e.clientY;
@@ -457,6 +435,7 @@ document.addEventListener('mousemove', e => {
     updateCamera();
 });
 document.addEventListener('wheel', e => {
+    if (e.target.closest('#controls, #lightCurvePanel, #codecPanel')) return;
     cameraDistance = Math.max(1.5, Math.min(6, cameraDistance + e.deltaY * 0.001));
     updateCamera();
 });
@@ -874,7 +853,9 @@ const fragmentShader = `
         float bn   = (brightness - colorMin) / (colorMax - colorMin);
 
         if (rawMode) {
-            gl_FragColor = vec4(bn, 0.0, 0.0, 1.0);
+            float encoded = (brightness - colorMin) / (colorMax - colorMin);
+            float bandType = float(pixelType);
+            gl_FragColor = vec4(encoded, bandType / 2.0, 0.0, 1.0);
         } else {
             vec3 color = texture2D(colormapTex, vec2(bn, 0.5)).rgb;
             gl_FragColor = vec4(color, 1.0);
@@ -1170,14 +1151,34 @@ function toPython(val) {
 }
 
 function computeBrightness() {
-    // Render to offscreen target
+    // If spectra cache is populated, use wavelength-integrated flux over [lambdaMin, lambdaMax]
+    if (spectraCache && Object.keys(spectraCache).length > 0) {
+        const { fractions } = computeBinFractions();
+        let totalFlux = 0;
+        for (let i = 0; i < N_BINS; i++) {
+            if (fractions[i] < 1e-6) continue;
+            const s = spectraCache[i];
+            if (!s) continue;
+            let flux = 0;
+            for (let w = 0; w < s.wavelengths.length; w++) {
+                if (s.wavelengths[w] >= lambdaMin && s.wavelengths[w] <= lambdaMax) {
+                    flux += s.fluxes[w];
+                }
+            }
+            totalFlux += fractions[i] * flux;
+        }
+        return totalFlux;
+    }
+
+    // Fallback: raw pixel brightness before spectra are loaded
+    uniforms.rawMode.value = true;
     renderer.setRenderTarget(lcRenderTarget);
     renderer.render(scene, lcCamera);
     renderer.setRenderTarget(null);
     renderer.readRenderTargetPixels(lcRenderTarget, 0, 0, 128, 128, lcPixels);
+    uniforms.rawMode.value = false;
 
-    // Sum all pixel luminances — straight average, no mu weighting
-    // matching main.py's region_pixels.mean(axis=1)
+    // Straight average matching main.py's region_pixels.mean(axis=1)
     let totalLum   = 0;
     let totalCount = 0;
     const cx = 64, cy = 64, R = 60;
@@ -1204,6 +1205,7 @@ function resetLightCurve() {
 }
 
 function updateLightCurve() {
+    if (!spectraCache || Object.keys(spectraCache).length === 0) return;
     lcHistory.shift();
     lcHistory.push(computeBrightness());
     drawLightCurve();
@@ -1266,14 +1268,37 @@ function drawLightCurve() {
     }
     ctx2d.stroke();
 
-    // Amplitude + time axis labels
+    // Amplitude label
     const amplitude = ((maxC - minC) / maxC * 100).toFixed(2);
     document.getElementById('lcAmplitude').textContent = `Δ = ${amplitude}%`;
-    const framesPerRotation = (2 * Math.PI) / 0.005;
-    document.getElementById('lcTimeStart').textContent = `0 hr`;
-    document.getElementById('lcTimeEnd').textContent   = '30 hr';
 }
 
+
+// ════════════════════════════════════════════════════════════
+// 12b. WAVELENGTH RANGE
+// ════════════════════════════════════════════════════════════
+
+function applyWavelengthRange() {
+    const newMin = parseFloat(document.getElementById('lambdaMin').value);
+    const newMax = parseFloat(document.getElementById('lambdaMax').value);
+    if (isNaN(newMin) || isNaN(newMax) || newMin >= newMax) {
+        document.getElementById('spectrumStatus').textContent = 'Error: λ min must be less than λ max';
+        return;
+    }
+    lambdaMin = newMin;
+    lambdaMax = newMax;
+    // Reset the Plotly xaxis to the new range
+    const div = document.getElementById('spectrumCanvas');
+    if (div._plotlyInitialized) {
+        Plotly.relayout(div, { 'xaxis.range': [lambdaMin, lambdaMax], 'xaxis.autorange': false });
+    }
+    // Reset LC history so old out-of-range values don't pollute the plot
+    resetLightCurve();
+    // Trigger an immediate spectrum recompute with new range
+    referenceSpectrum = null;
+    isComputing = false;
+    computeCompositeSpectrum();
+}
 
 // ════════════════════════════════════════════════════════════
 // 13. ANIMATION LOOP
@@ -1281,8 +1306,8 @@ function drawLightCurve() {
 
 let t = 0;
 let specFrameCount = 0;
-const SPEC_UPDATE_RATE = 24;
-let specAutoUpdate    = false;
+const SPEC_UPDATE_RATE = 5;
+let specAutoUpdate    = true;
 let isComputing       = false;
 let residualMode      = false;
 let referenceSpectrum = null;
@@ -1307,88 +1332,6 @@ animate();
 // ════════════════════════════════════════════════════════════
 // 14. EXPORT PANEL
 // ════════════════════════════════════════════════════════════
-
-let selectedSimPreset  = null;
-
-// ── Simulation presets ────────────────────────────────────────
-
-const SIM_PRESETS = {
-    default: {
-        label: 'Default Brown Dwarf',
-        description: 'Standard brown dwarf with 2 equatorial bands, 5 polar vortices, polarStatic modulation. Good starting point for most simulations.',
-        modu_config: 'polarStatic',
-        amp_config: {
-            Prot: 5, Fpolar: 0.98, Fband: 1.0, Fambient: 1.0,
-            Fpolar_var: 0.05, Fband_var: 0.15, Fambient_var: 0.0
-        },
-        band_config_array: [
-            [90, 65, 0.98, 'P', 0, 60, 5, 0.05],
-            [15, 5, 1.0,  'B', 0, 2.5, 5, 0.15],
-            [-5, -15, 1.0, 'B', 0, 2.5, 5, 0.15],
-            [-65, -90, 0.98, 'P', 0, 60, 5, 0.05],
-        ],
-        vortex_config: [5, 0.0075, true, 80, 0.15],
-    },
-    active: {
-        label: 'Active Vortices',
-        description: 'High vortex amplitude with polarDynamic modulation — each vortex pulses independently. Best for studying vortex-driven variability.',
-        modu_config: 'polarDynamic',
-        amp_config: {
-            Prot: 5, Fpolar: 0.98, Fband: 1.0, Fambient: 1.0,
-            Fpolar_var: 0.2, Fband_var: 0.15, Fambient_var: 0.0
-        },
-        band_config_array: [
-            [90, 65, 0.98, 'P', 0, 60, 5, 0.05],
-            [15, 5, 1.0,  'B', 0, 2.5, 5, 0.15],
-            [-5, -15, 1.0, 'B', 0, 2.5, 5, 0.15],
-            [-65, -90, 0.98, 'P', 0, 60, 5, 0.05],
-        ],
-        vortex_config: [5, 0.0075, true, 80, 0.4],
-    },
-    quiet: {
-        label: 'Quiet Atmosphere',
-        description: 'Minimal variability, no vortices. Useful as a baseline comparison or for studying band-only signals.',
-        modu_config: 'polarStatic',
-        amp_config: {
-            Prot: 5, Fpolar: 0.98, Fband: 1.0, Fambient: 1.0,
-            Fpolar_var: 0.01, Fband_var: 0.03, Fambient_var: 0.0
-        },
-        band_config_array: [
-            [90, 65, 0.98, 'P', 0, 60, 5, 0.05],
-            [15, 5, 1.0,  'B', 0, 2.5, 5, 0.15],
-            [-5, -15, 1.0, 'B', 0, 2.5, 5, 0.15],
-            [-65, -90, 0.98, 'P', 0, 60, 5, 0.05],
-        ],
-        vortex_config: false,
-    },
-};
-
-// ── Preset selection ──────────────────────────────────────────
-
-function selectSimPreset(id) {
-    selectedSimPreset = id;
-
-    // Highlight selected
-    document.querySelectorAll('[id^="simBtn_"]').forEach(btn => {
-        btn.style.borderColor = '#334';
-        btn.style.color = '#ccc';
-    });
-    document.getElementById(`simBtn_${id}`).style.borderColor = '#88ccff';
-    document.getElementById(`simBtn_${id}`).style.color = 'white';
-
-    // Show description
-    const desc = document.getElementById('simPresetDesc');
-    desc.style.display = 'block';
-    if (id === 'current') {
-        desc.innerHTML = `<strong style="color:white;">Current GUI Settings</strong><br>
-            Exports exactly what you see in the simulator right now —
-            ${advancedBands.length} bands, ${advancedVortices.length} vortices,
-            ${polarDynamic ? 'polarDynamic' : 'polarStatic'} mode.`;
-    } else {
-        const p = SIM_PRESETS[id];
-        desc.innerHTML = `<strong style="color:white;">${p.label}</strong><br>${p.description}`;
-    }
-}
 
 // ── Build simulation config from current GUI state ────────────
 
@@ -1441,10 +1384,10 @@ function toggleExportPanel() {
 
 // CODEC / COMPOSITE SPECTRUM ------------------------
 
-const SPECTRA_BASE_URL = 'spec_module/bd_grid_noCH4_n=50_20260322_193125/';
+const SPECTRA_BASE_URL = 'spec_module/bd_grid_noCH4_n=50_R=300_20260504_182749/';
 const N_BINS           = 50;
-const FSED_MIN         = 1.0;
-const FSED_MAX         = 1.196;
+const FSED_MIN         = 1.0000;
+const FSED_MAX         = 1.1960;
 const BRIGHT_MIN       = 0.95;   // brightness → fsed_min (thickest clouds)
 const BRIGHT_MAX       = 1.05;   // brightness → fsed_max (thinnest clouds)
  
@@ -1458,14 +1401,13 @@ const spectraCache = {};
 function getFsedFilename(binIndex) {
     const fsed = FSED_MIN + binIndex * (FSED_MAX - FSED_MIN) / (N_BINS - 1);
     const fsedStr = fsed.toFixed(4);
-    return `spec_1200_10000_1.0000E+07_${fsedStr}_cloudy.csv`;
+    return `spec_1200_20000_1.0000E+07_${fsedStr}_cloudy.csv`;
 }
  
 async function fetchSpectrum(binIndex) {
     if (spectraCache[binIndex]) return spectraCache[binIndex];
     const filename = getFsedFilename(binIndex);
-    // After
-    const url = SPECTRA_BASE_URL + filename.replace(/\+/g, '%2B');
+    const url = SPECTRA_BASE_URL + filename;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`Failed to fetch ${filename}`);
     const text = await resp.text();
@@ -1491,7 +1433,9 @@ function computeBinFractions() {
     uniforms.rawMode.value = false;
 
     const cx = 512, cy = 512, R = 490;
-    const counts = new Float64Array(N_BINS);
+    const counts     = new Float64Array(N_BINS);
+    const typeCounts = new Uint8Array(N_BINS); // dominant type per bin: 1=B, 2=P
+    const typeAccum  = new Float64Array(N_BINS); // accumulated type values per bin
     let total = 0;
 
     for (let py = 0; py < 1024; py++) {
@@ -1499,26 +1443,31 @@ function computeBinFractions() {
             const dx = px - cx, dy = py - cy;
             if (dx*dx + dy*dy > R*R) continue;
 
-            const idx = (py * 1024 + px) * 4;
-            const bn  = specPixels[idx] / 255; // R channel = normalized brightness
+            const idx      = (py * 1024 + px) * 4;
+            const bn       = specPixels[idx] / 255;
+            const typeVal  = Math.round(specPixels[idx + 1] / 255 * 2); // 0, 1, or 2
 
-            // Posterize into bin
             const bin = Math.min(N_BINS - 1, Math.floor(bn * N_BINS));
 
-            // Cubic limb darkening (matches codec.py default ld_law='cubic')
             const dist = Math.sqrt(dx*dx + dy*dy) / R;
             const mu   = Math.pow(Math.max(0, 1 - dist*dist), 1.5);
 
-            counts[bin] += mu;
-            total       += mu;
+            counts[bin]    += mu;
+            typeAccum[bin] += typeVal * mu;
+            total          += mu;
         }
     }
 
-    const fractions = new Float64Array(N_BINS);
+    const fractions  = new Float64Array(N_BINS);
+    const binTypes   = new Uint8Array(N_BINS);
     if (total > 0) {
-        for (let i = 0; i < N_BINS; i++) fractions[i] = counts[i] / total;
+        for (let i = 0; i < N_BINS; i++) {
+            fractions[i] = counts[i] / total;
+            // dominant type = weighted average rounded to nearest integer
+            binTypes[i]  = counts[i] > 0 ? Math.round(typeAccum[i] / counts[i]) : 0;
+        }
     }
-    return fractions;
+    return { fractions, binTypes };
 }
  
 function toggleResidualMode() {
@@ -1533,84 +1482,80 @@ function toggleResidualMode() {
 }
 
 function drawSpectrum(wavelengths, fluxes) {
-    const canvas = document.getElementById('spectrumCanvas');
-    const ctx    = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    const pad = { top: 10, right: 10, bottom: 28, left: 48 };
-
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, W, H);
-
     let plotFluxes = fluxes;
-    let yLabel = 'Flux';
+    let yLabel = 'Flux (erg/cm²/s/Hz)';
+
     if (residualMode && referenceSpectrum) {
-        plotFluxes = fluxes.map((f, i) => (f / referenceSpectrum[i]) || 1);
+        plotFluxes = fluxes.map((f, i) => f / (referenceSpectrum[i] || 1));
         yLabel = 'F/F₀';
     }
 
-    const wMin = Math.min(...wavelengths), wMax = Math.max(...wavelengths);
-    let fMin = Math.min(...plotFluxes), fMax = Math.max(...plotFluxes);
-    if (residualMode && referenceSpectrum) {
-        const absMax = Math.max(...plotFluxes.map(f => Math.abs(f - 1)));
-        fMin = 1 - absMax; fMax = 1 + absMax;
+    const darkLayout = {
+        dragmode:      'pan',
+        paper_bgcolor: '#111',
+        plot_bgcolor:  '#111',
+        font:          { color: '#aaa', size: 10 },
+        margin:        { t: 10, r: 10, b: 40, l: 55 },
+        xaxis: {
+            title:      { text: 'Wavelength (μm)', font: { size: 10 } },
+            range:      [lambdaMin, lambdaMax],
+            color:      '#555',
+            gridcolor:  '#222',
+            zerolinecolor: '#333',
+        },
+        yaxis: {
+            title:      { text: yLabel, font: { size: 10 } },
+            color:      '#555',
+            gridcolor:  '#222',
+            zerolinecolor: residualMode ? '#444' : '#333',
+            zeroline:   residualMode,
+        },
+        showlegend: false,
+    };
+
+    const trace = {
+        x:    wavelengths,
+        y:    Array.from(plotFluxes),
+        type: 'scatter',
+        mode: 'lines',
+        line: { color: residualMode ? '#ffaa44' : '#44aaff', width: 1.5 },
+    };
+
+    const div = document.getElementById('spectrumCanvas');
+    if (!div._plotlyInitialized) {
+        Plotly.newPlot(div, [trace], darkLayout, {
+            responsive:      false,
+            displayModeBar:  true,
+            modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+            displaylogo:     false,
+        });
+        div._plotlyInitialized = true;
+    } else {
+        const gd = div;
+        const xRange = gd.layout && gd.layout.xaxis.range ? gd.layout.xaxis.range : [lambdaMin, lambdaMax];
+        const yRange = gd.layout && gd.layout.yaxis.range ? gd.layout.yaxis.range : null;
+        const dragmode = gd.layout && gd.layout.dragmode ? gd.layout.dragmode : 'pan';
+
+        // Always enforce lambdaMin/lambdaMax bounds
+        darkLayout.xaxis.range = [
+            Math.max(lambdaMin, xRange[0]),
+            Math.min(lambdaMax, xRange[1])
+        ];
+        if (yRange) darkLayout.yaxis.range = yRange;
+        darkLayout.dragmode = dragmode;
+
+        Plotly.react(div, [trace], darkLayout);
     }
-    const wRange = wMax - wMin, fRange = fMax - fMin || 1;
-
-    const toX = w => pad.left + (w - wMin) / wRange * (W - pad.left - pad.right);
-    const toY = f => H - pad.bottom - (f - fMin) / fRange * (H - pad.top - pad.bottom);
-
-    // Grid
-    ctx.strokeStyle = '#222'; ctx.lineWidth = 1;
-    for (let i = 0; i <= 4; i++) {
-        const y = pad.top + i / 4 * (H - pad.top - pad.bottom);
-        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
-    }
-
-    // Zero line in residual mode
-    if (residualMode && referenceSpectrum) {
-        ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        const y0 = toY(1);
-        ctx.beginPath(); ctx.moveTo(pad.left, y0); ctx.lineTo(W - pad.right, y0); ctx.stroke();
-        ctx.setLineDash([]);
-    }
-
-    // Axis labels
-    ctx.fillStyle = '#555'; ctx.font = '9px Arial'; ctx.textAlign = 'center';
-    ctx.fillText('Wavelength (μm)', W / 2, H - 4);
-    ctx.save(); ctx.translate(10, H / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText(yLabel, 0, 0); ctx.restore();
-
-    // Tick labels
-    ctx.fillStyle = '#444'; ctx.font = '8px Arial';
-    for (let i = 0; i <= 4; i++) {
-        const w = wMin + i / 4 * wRange;
-        ctx.textAlign = 'center';
-        ctx.fillText(w.toFixed(1), toX(w), H - pad.bottom + 10);
-    }
-
-    // Spectrum curve
-    ctx.strokeStyle = residualMode ? '#ffaa44' : '#44aaff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < wavelengths.length; i++) {
-        const x = toX(wavelengths[i]), y = toY(plotFluxes[i]);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
 }
 
 async function computeCompositeSpectrum() {
     if (isComputing) return;
     isComputing = true;
-    const btn    = document.getElementById('computeSpecBtn');
     const status = document.getElementById('spectrumStatus');
-    btn.disabled = true;
-    btn.textContent = 'Computing...';
     status.textContent = 'Rendering scene...';
  
     try {
-        const fractions = computeBinFractions();
+        const { fractions, binTypes } = computeBinFractions();
  
         // Find bins with meaningful contribution
         //const threshold = 0.001;
@@ -1629,12 +1574,23 @@ async function computeCompositeSpectrum() {
         const wavelengths = spectra[0].wavelengths;
         const composite   = new Float64Array(wavelengths.length);
  
-        for (let s = 0; s < activeBins.length; s++) {
-            const frac = fractions[activeBins[s]];
-            const flux = spectra[s].fluxes;
-            for (let w = 0; w < wavelengths.length; w++) {
-                composite[w] += frac * flux[w];
+        for (let i = 0; i < activeBins.length; i++) {
+            const binIdx  = activeBins[i];
+            const frac    = fractions[binIdx];
+            const bType   = binTypes[binIdx];
+            const scale   = bType === 1 ? waveAmp : bType === 2 ? polarVar : 1.0;
+            if (frac < 1e-6) continue;
+            const s = spectra[i];
+            if (!s) continue;
+            for (let w = 0; w < composite.length; w++) {
+                composite[w] += frac * scale * s.fluxes[w];
             }
+        }
+
+        if (!referenceSpectrum) {
+                // Set reference spectrum to the first computed composite for residual mode
+                referenceSpectrum = Array.from(composite);
+                resetLightCurve(); // Clear LC history so old values don't skew the plot when switching to residual mode
         }
  
         if (!referenceSpectrum) referenceSpectrum = Array.from(composite);
@@ -1646,17 +1602,11 @@ async function computeCompositeSpectrum() {
         console.error(err);
     }
  
-    btn.disabled = false;
-    btn.textContent = 'Compute';
     isComputing = false;
 }
 
 
 function exportSimConfig() {
-    if (!selectedSimPreset) {
-        alert('Please select a simulation preset first.');
-        return;
-    }
 
     const t0         = parseFloat(document.getElementById('simT0').value);
     const t1         = parseFloat(document.getElementById('simT1').value);
@@ -1667,21 +1617,12 @@ function exportSimConfig() {
 
     let band_config_array, amp_config, modu_config, vortex_config, phase_values;
 
-    if (selectedSimPreset === 'current') {
-        const cfg      = buildCurrentSimConfig();
-        band_config_array = cfg.band_config_array;
-        amp_config     = cfg.amp_config;
-        modu_config    = cfg.modu_config;
-        vortex_config  = cfg.vortex_config;
-        phase_values   = polarDynamic ? advancedVortices.map(v => v.phase) : null;
-    } else {
-        const p        = SIM_PRESETS[selectedSimPreset];
-        band_config_array = p.band_config_array;
-        amp_config     = p.amp_config;
-        modu_config    = p.modu_config;
-        vortex_config  = p.vortex_config;
-        phase_values   = null;
-    }
+    const cfg      = buildCurrentSimConfig();
+    band_config_array = cfg.band_config_array;
+    amp_config     = cfg.amp_config;
+    modu_config    = cfg.modu_config;
+    vortex_config  = cfg.vortex_config;
+    phase_values   = polarDynamic ? advancedVortices.map(v => v.phase) : null;
 
     const bandStr    = '[\n' + band_config_array.map(row => '    ' + toPython(row) + ',').join('\n') + '\n]';
     const ampStr     = toPython(amp_config, null, 4)
@@ -1699,7 +1640,7 @@ function exportSimConfig() {
 Brown Dwarf Simulation Script
 Generated by Brown Dwarf Simulator GUI
 Date: ${new Date().toISOString()}
-Preset: ${selectedSimPreset}
+Preset: GUI Custom Configuration
 
 Usage:
     python run_simulation.py
@@ -1718,7 +1659,7 @@ SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR  = os.path.join(SCRIPT_DIR, 'output')
 
 # ── Simulation settings ───────────────────────────────────────
-RUN_NAME = '${selectedSimPreset}_simulation'
+RUN_NAME = 'custom_simulation'
 
 sim_config = {
     'modu_config':      '${modu_config}',

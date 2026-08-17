@@ -1,0 +1,220 @@
+modelbd_1400_10000_5.0000E+05_1.0000_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.0
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.0200_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.02
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.0400_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.04
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.0600_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.06
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.0800_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.08
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.1000_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.1
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.1200_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.12
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.1400_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.14
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.1600_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.16
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
+modelbd_1400_10000_5.0000E+05_1.1800_cloudy:
+  Atmosphere:
+    Teff       : 1400 K
+    C_to_O     : 1.0
+    mh         : 1.0
+    gravity    : 10000.0 cm/s^2 (cgs)
+    kzz        : 500000.0 cm^2/s
+    phase      : 0 rad
+    wave_range : [0.3, 15.0] micron
+    eq         : False
+    excluded_mol: None
+    background : diamondback
+    diamondback_fsed: 4
+  Clouds:
+    fsed       : 1.18
+    mmw        : 2.2
+    gases      : ['Fe', 'MgSiO3', 'SiO2']
+    R          : 300
+  Output:
+
+----------------------------------------------------------------------------------------------------
+
