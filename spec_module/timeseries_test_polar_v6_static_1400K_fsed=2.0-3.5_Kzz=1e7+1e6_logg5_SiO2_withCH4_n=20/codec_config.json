@@ -1,0 +1,90 @@
+{
+  "version": "1.0",
+  "codec_definitions": {
+    "feature_type": {
+      "max_value": 2,
+      "values": [
+        1,
+        2
+      ],
+      "description": "1=other regions (folder A: bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547);\n 2=B1/B4 mid-latitude bands (folder B: bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613)"
+    },
+    "cloud_thickness": {
+      "max_value": 20,
+      "values": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "description": "Cloud optical depth levels"
+    }
+  },
+  "codec_order": [
+    "feature_type",
+    "cloud_thickness"
+  ],
+  "spectra_assignments": {
+    "0": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.0000_cloudy.csv",
+    "20": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.0000_cloudy.csv",
+    "1": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.0250_cloudy.csv",
+    "21": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.0750_cloudy.csv",
+    "2": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.0500_cloudy.csv",
+    "22": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.1500_cloudy.csv",
+    "3": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.0750_cloudy.csv",
+    "23": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.2250_cloudy.csv",
+    "4": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.1000_cloudy.csv",
+    "24": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.3000_cloudy.csv",
+    "5": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.1250_cloudy.csv",
+    "25": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.3750_cloudy.csv",
+    "6": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.1500_cloudy.csv",
+    "26": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.4500_cloudy.csv",
+    "7": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.1750_cloudy.csv",
+    "27": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.5250_cloudy.csv",
+    "8": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.2000_cloudy.csv",
+    "28": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.6000_cloudy.csv",
+    "9": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.2250_cloudy.csv",
+    "29": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.6750_cloudy.csv",
+    "10": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.2500_cloudy.csv",
+    "30": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.7500_cloudy.csv",
+    "11": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.2750_cloudy.csv",
+    "31": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.8250_cloudy.csv",
+    "12": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.3000_cloudy.csv",
+    "32": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.9000_cloudy.csv",
+    "13": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.3250_cloudy.csv",
+    "33": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_2.9750_cloudy.csv",
+    "14": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.3500_cloudy.csv",
+    "34": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_3.0500_cloudy.csv",
+    "15": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.3750_cloudy.csv",
+    "35": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_3.1250_cloudy.csv",
+    "16": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.4000_cloudy.csv",
+    "36": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_3.2000_cloudy.csv",
+    "17": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.4250_cloudy.csv",
+    "37": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_3.2750_cloudy.csv",
+    "18": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.4500_cloudy.csv",
+    "38": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_3.3500_cloudy.csv",
+    "19": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547/spec_1400_10000_1.0000E+07_2.4750_cloudy.csv",
+    "39": "/Users/nguyendat/Documents/GitHub/polarVortexJwst/spec_module/bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613/spec_1400_10000_1.0000E+06_3.4250_cloudy.csv"
+  },
+  "metadata": {
+    "created": "2026-08-17T14:22:21.674942",
+    "total_combinations": 40,
+    "assigned_spectra": 40
+  }
+}

@@ -1964,8 +1964,8 @@ if __name__ == "__main__":
     # for specmask config. 
     # runName = 'test_polar_v3_static' # same bandConfig as v1
     # runName = 'test_polar_v4_static' # same bandConfig as v2
-    # runName = 'test_polar_v5_static' # same bandConfig as v3    
-    runName = 'test_polar_v6_static' # same bandConfig as v4
+    runName = 'test_polar_v5_static' # same bandConfig as v3    
+    # runName = 'test_polar_v6_static' # same bandConfig as v4
 
     # runName = 'test_onlyVortex_v0_dynamic1'
     # runName = 'test_onlyVortex_v0_dynamic2'
@@ -2038,10 +2038,10 @@ if __name__ == "__main__":
         bandConfig = [
             # [lat2, lat1, amplitude, type, phase, period]
             [90, 65, Fpolar, 'P', 0, Ppol, Prot, Fpolar_var],
-            [28, 21, Fband, 'B', 0, Pband/2+0.1, Prot, Fband_var],
-            [12, 5, Fband, 'B', 10, Pband-0.15, Prot, Fband_var], 
-            [-5, -12, Fband, 'B', 10, Pband+0.15, Prot, Fband_var],
-            [-21, -28, Fband, 'B', 0, Pband/2-0.1, Prot, Fband_var],
+            [28, 21, Fband, 'B', 180, Pband/2+0.1, Prot, Fband_var],
+            [12, 5, Fband, 'B', 0, Pband-0.15, Prot, Fband_var], 
+            [-5, -12, Fband, 'B', 90, Pband+0.15, Prot, Fband_var],
+            [-21, -28, Fband, 'B', 90, Pband/2-0.1, Prot, Fband_var],
             [-65, -90, Fpolar, 'P', 0, Ppol-0.05*Ppol/2., Prot-0.05*Prot/2., Fpolar_var]]
 
     if 'test_polar_v4' in runName or 'jwst_v4' in runName or 'polar_v6' in runName:

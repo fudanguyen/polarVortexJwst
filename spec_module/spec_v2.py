@@ -17,6 +17,8 @@ import re
 import math
 from io import StringIO
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Set environment variables FIRST before any other imports
 picaso_refdata = "/Users/nguyendat/Documents/GitHub/picaso/reference/"
 pysyn_cdbs = "/Users/nguyendat/Documents/GitHub/picaso/reference/stellar_spectra/grp/redcat/trds"
@@ -296,7 +298,7 @@ def convert_unit(df, R=500):
                # indexing out['wavenumber'] keeps working as before
 
 # ============================================================================
-def configure_atm(C_to_O=0.55, mh=1.0, Teff=1200, gravity=10000,
+def configure_atm(C_to_O=0.55, mh=1.0, Teff=1400, gravity=10000,
                   kzz=1e7, phase=0, wave_range=[1,6], eq=False, excluded_mol=None,
                   background='bobcat', diamondback_fsed=1):
     """Configure brown dwarf atmosphere.
@@ -613,7 +615,7 @@ def generate_fsed(
 
 # ===========================================================================
 def create_parameter_grid(
-    Teff_list=[1200],
+    Teff_list=[100],
     C_to_O_list=[0.55],
     mh_list=[1.0],
     gravity_list=[10000],
@@ -695,7 +697,8 @@ def run_parallel_grid(parameter_grid, runname='picaso_run', n_processes=None):
         n_processes = max(1, cpu_count() - 1)
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_dir = f"{runname}_{timestamp}"
+    base_dir =  SCRIPT_DIR
+    output_dir = os.path.join(base_dir, f"{runname}_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"Output directory: {output_dir}")
@@ -791,49 +794,80 @@ def write_config_file(filename, results):
 if __name__ == "__main__":
 
     print("Setting up parameter grid...")
-
+    import re
     # runnerName = 'bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=50_R=300'
 
-    runnerName = 'bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300'
-    runnerName = 'bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=3.0-4.0_n=20_R=300'
+    # runnerName = 'bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300'
+    # runnerName = 'bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-2.50_n=20_R=300'
+    # runnerName = 'bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300'
 
-    # runnerName = 'bd_v2_grid_withCH4_fsed=1.0_n=20_R=300'
-    # runnerName = 'bd_v2_grid_withCH4_fsed=2.0_n=20_R=300'
-    # runnerName = 'bd_v2_grid_withCH4_fsed=3.0_n=20_R=300'
-    # runnerName = 'bd_v2_grid_withCH4_fsed=4.0_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=7e9_withCH4_fsed=1.0-1.25_n=50_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=3e9_withCH4_fsed=1.0-1.25_n=50_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=1.0-1.25_n=50_R=300'
 
-    # runnerName = 'bd_v2_grid_withCH4_fsed=1.0-1.50_n=50_R=300'
-    # runnerName = 'bd_v2_grid_withCH4_fsed=2.0_n=50_R=300'
-    # runnerName = 'bd_v2_grid_withCH4_fsed=3.0_n=50_R=300'
-    # runnerName = 'bd_v2_grid_withCH4_fsed=4.0_n=50_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=7e9_withCH4_fsed=1.0-1.25_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=3e9_withCH4_fsed=1.0-1.25_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=1.3-1.5_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=2.0-2.4_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=3.0-3.4_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=5e8_withCH4_fsed=3.0-3.6_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e8_withCH4_fsed=3.0-3.6_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.5_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.5-3.5_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e8_withCH4_fsed=1.0-1.50_n=20_R=300'
 
-    g_cgs_list = [1e4]  # cm/s^2
-    wave_rangeList = [[0.7, 15.0]]  # um
-    Teff_list = [1300]  # K
-    C_to_O_list = [1.0]  # C/O relative to solar
-    mh_list = [1.0]  # metallicity relative to solar
-    kzz_list = [1e7]  # kzz
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=1.0-1.5_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=3.0-3.5_n=20_R=300'
+    # runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=1.0-1.5_n=20_R=300'
+    runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-2.5_n=20_R=300'
+    runnerName = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-2.5_n=20_R=300_CO=2'
+
+    Teff = int(re.search(r'Teff=(\d+)K', runnerName).group(1))
+    kzz = float(re.search(r'kzz=([0-9.eE+-]+)', runnerName).group(1))
+    match = re.search(r'CO=([0-9.eE+-]+)', runnerName)
+    C_O = float(match.group(1)) if match else None
+
+    # Teff_list=[100],
+    # C_to_O_list=[0.55],
+    # mh_list=[1.0],
+    # gravity_list=[10000],
+    # kzz_list=[1e7],
+    # phase_list=[0],
+    # wave_range_list=[[1, 10]],
+    # eq_list=[False],
+    # excluded_mol_list=[None],
+    # mmw_list=[2.2],
+    # fsed_list=[1],
+    # R_list=[500],
+    # gases_list=[['Fe', 'MgSiO3', 'Mg2SiO4', 'Al2O3', 'Na2S']],
+    # background_list=['bobcat'],          # NEW
+    # diamondback_fsed_list=[1],           # NEW
+    # cloudfree=False
+
+    g_cgs_list = [3e4]
+    wave_rangeList = [[0.7, 15.0]]
+    Teff_list = [Teff]
+    C_to_O_list = [1.0 if C_O is None else C_O]
+    mh_list = [1.0]
+    kzz_list = [kzz]
+
+    fsed_match = re.search(r'fsed=([0-9.eE+-]+)-([0-9.eE+-]+)', runnerName)
+    if fsed_match:
+        fsed_start, fsed_stop = float(fsed_match.group(1)), float(fsed_match.group(2))
+    else:
+        # fall back to single-value form, e.g. 'fsed=2.0_n=20' (no dash = no range)
+        single_match = re.search(r'fsed=([0-9.eE+-]+)(?:_|$)', runnerName)
+        if single_match:
+            fsed_start = fsed_stop = float(single_match.group(1))
+        else:
+            raise ValueError(f"Could not parse fsed range from runnerName: {runnerName!r}")
 
     # NEW: opt into the Diamondback climate-converged background here. Leave
     # as 'bobcat'/[1] to reproduce old behavior exactly.
     # background_list = ['bobcat']
     background_list = ['diamondback']
-    diamondback_fsed_list = [4]
-
-    if 'fsed=1.0-1.50' in runnerName:
-        fsed_start, fsed_stop = 1.0, 1.5
-        gases = ['Fe', 'MgSiO3', 'SiO2']
-    elif 'fsed=2.0-2.5' in runnerName:
-        fsed_start, fsed_stop = 2.0, 2.5
-        gases = ['Fe', 'MgSiO3', 'SiO2']
-    elif 'fsed=3.0-4.0' in runnerName:
-        fsed_start, fsed_stop = 3.0, 4.0
-        gases = ['Fe', 'MgSiO3']
-    elif 'fsed=4.0-5.0' in runnerName:
-        fsed_start, fsed_stop = 4.0, 5.0
-        gases = ['Fe', 'SiO2']
-    else:
-        fsed_start, fsed_stop = 1.0, 1.2
+    gases = ['Fe', 'Al2O3', 'MgSiO3', 'Mg2SiO4', 'SiO2']  # same gases for every run now
+    diamondback_fsed_list = [np.floor(fsed_stop)]
 
     R = int(runnerName.split('_R=')[-1])
     mode = 'complex' if 'complex' in runnerName else 'simple'
@@ -841,7 +875,6 @@ if __name__ == "__main__":
     n_levels = int(runnerName.split('_n=')[-1].split('_')[0])
 
     excluded_mol = 'CH4' if 'noCH4' in runnerName else None
-
     if mode == 'simple':
         fsed_list = generate_fsed(
             mode='simple',
@@ -849,18 +882,15 @@ if __name__ == "__main__":
             stop=fsed_stop,
             total=n_levels,
         )
-
     elif mode == 'complex':
         iterationName = "fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]"
         runnerName = f"{runnerName}_{iterationName}"
-
         fsed_list = generate_fsed(
             mode='complex',
             species_params={
                 'Fe':     14,
                 'MgSiO3': {'start': 3.1, 'stop': 3.9},
-                'Na2S':   {'start': 4.6, 'stop': 2.8},
-            },
+                'Na2S':   {'start': 4.6, 'stop': 2.8},},
             n_steps=n_levels,
             gases=gases,
         )

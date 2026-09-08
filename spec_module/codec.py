@@ -1197,7 +1197,7 @@ if __name__ == "__main__":
     photometryh5dir = '/Users/nguyendat/Documents/GitHub/polarVortexJwst/rendering/atm_renderer/output/'
     
     ### test static/dynamic
-    photrunName = 'test_polar_v0_static.h5' # used for complex fsed test as well
+    # photrunName = 'test_polar_v0_static.h5' # used for complex fsed test as well
     # photrunName = 'test_polar_v0_dynamic.h5'
 
     # photrunName = 'test_polar_v1_static.h5'
@@ -1215,7 +1215,7 @@ if __name__ == "__main__":
     # photrunName = 'test_onlyVortex_v0_dynamic2.h5' 
 
     ### jwst static/dynamic
-    # photrunName = 'jwst_v1_static.h5'
+    photrunName = 'jwst_v1_static.h5'
 
     # photrunName = 'jwst_v0_static.h5' # not used in paper
     # photrunName = 'jwst_v0_dynamic.h5' # not used in paper
@@ -1254,10 +1254,15 @@ if __name__ == "__main__":
     # n=50
     # specFolderName = 'bd_v2_grid_withCH4_fsed=1.0-1.50_n=50_R=300_20260816_180147'
 
-     ### With SiO2, CH4, n=50, 1300K, 1e7 Kzz, fsed=1-1.5, logg=4
-    specConfigName = f'1300K_fsed=1-1.5_Kzz=1e7_logg4_SiO2_withCH4_n=50'
-    n=50
-    specFolderName = 'bd_v3_grid_Teff=1300K_kzz=1e7_withCH4_fsed=1.0-1.50_n=50_R=300_20260816_212459'
+     ### With SiO2, CH4, n=50, 1400K, 1e9-7e9 Kzz, fsed=1-1.25, logg=4.5
+    # specConfigName = f'1400K_fsed=1-1.25_Kzz=7e9_logg4.5_SiO2_withCH4_n=50'
+    specConfigName = f'1400K_fsed=1-1.25_Kzz=3e9_logg4.5_SiO2_withCH4_n=50'
+    # specConfigName = f'1400K_fsed=1-1.25_Kzz=1e9_logg4.5_SiO2_withCH4_n=50'
+
+    n = int(specConfigName.split('_n=')[-1].split('_')[0])
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=7e9_withCH4_fsed=1.0-1.25_n=50_R=300_20260826_213410'
+    specFolderName = 'bd_v4_grid_Teff=1400K_kzz=3e9_withCH4_fsed=1.0-1.25_n=50_R=300_20260826_215713'
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=1.0-1.25_n=50_R=300_20260826_214408'
 
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 

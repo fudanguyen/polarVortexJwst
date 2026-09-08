@@ -1160,7 +1160,8 @@ def derive_feature_type_map(specmask, speckey, target_labels=('B1', 'B4'),
     return feature_map
 
 def plot_variability_map(composite_spectra_ts, time_array, wave_bin=0.1, t_min=0.0, t_max=10.0,
-                          wave_range=None, inclin=None, cmap='RdBu_r', save_path=None, figshape=(8, 5)):
+                          wave_range=None, inclin=None, cmap='RdBu_r', save_path=None, figshape=(8, 5),
+                          vmin=None, vmax=None):
     """
     Build and plot a time-vs-wavelength variability map from a composite
     spectra time series.
@@ -1188,6 +1189,11 @@ def plot_variability_map(composite_spectra_ts, time_array, wave_bin=0.1, t_min=0
         inclin (str, optional): inclination label, used only in the title
         cmap (str): diverging colormap name, since variability is signed
         save_path (str, optional): if given, save the figure here
+        vmin (float, optional): lower color-scale bound (% deviation). If
+            None (default), set to -vmax for a symmetric scale.
+        vmax (float, optional): upper color-scale bound (% deviation). If
+            None (default), computed as the max absolute deviation in the
+            data (i.e. the original auto-scaling behavior).
  
     Returns:
         fig, ax, wave_centers, time_sel, variability
@@ -1249,9 +1255,12 @@ def plot_variability_map(composite_spectra_ts, time_array, wave_bin=0.1, t_min=0
     variability = 100.0 * (binned_flux - mean_flux) / mean_flux  # % deviation
  
     fig, ax = plt.subplots(figsize=figshape, dpi=300)
-    vmax = np.nanmax(np.abs(variability))
+    # resolve color-scale bounds: explicit vmax wins; otherwise auto from data.
+    # explicit vmin wins; otherwise mirror vmax for a symmetric diverging scale.
+    _vmax = vmax if vmax is not None else np.nanmax(np.abs(variability))
+    _vmin = vmin if vmin is not None else -_vmax
     mesh = ax.pcolormesh(wave_centers, time_sel, variability,
-                          shading='nearest', cmap=cmap, vmin=-vmax, vmax=vmax)
+                          shading='nearest', cmap=cmap, vmin=_vmin, vmax=_vmax)
     cbar = fig.colorbar(mesh, ax=ax)
     cbar.set_label('Variability (% deviation from time-mean flux)')
     ax.set_xlabel('Wavelength (μm)')
@@ -1287,8 +1296,8 @@ if __name__ == "__main__":
     ### test with individual-band naming speckey B1/B2/etc.abs
     # photrunName = 'test_polar_v3_static.h5'
     # photrunName = 'test_polar_v4_static.h5'
-    # photrunName = 'test_polar_v5_static.h5'
-    photrunName = 'test_polar_v6_static.h5'
+    photrunName = 'test_polar_v5_static.h5'
+    # photrunName = 'test_polar_v6_static.h5'
 
     ### polar long-baseline static/dyamic
     # photrunName = 'polar_v1_static_baseline120.h5' # not used in paper
@@ -1309,28 +1318,56 @@ if __name__ == "__main__":
 
     ### Simple fsed, n=20
     # specConfigName = f'1200K_clouds=20'
-    specConfigName = f'c1200K_clouds=20'
+    # specConfigName = f'c1200K_clouds=20'
     
     ### specFolderName = 'bd_grid_20251108_162457_all5condensates'
     ### specFolderName = 'bd_grid_20251202_simple3clouds'
     # specFolderName = 'bd_grid_noCH4_20251209_153457'
 
-    specFolderName = 'bd_grid_withCH4_fsed=2.0_n=20_R=300_20260729_221227'
-    n = 20
-    
-    ### Simple fsed, n=50
-    # specConfigName = f'1200K_clouds=50_newSpec1_logg2e4'
-    # #### specFolderName = 'bd_grid_noCH4_n=50_20260322_193125'
-    # specFolderName = 'bd_grid_noCH4_n=50_R=300_20260504_182749'
-    # n = 50
-
-    ### Comlex fsed per species, n=20
-    # # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg2e4'
-    # specConfigName = f'1200K_complexFsed_Fe14_Si3_Na4_newspec1_logg1e4'
-    # # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=50_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_131706'
-    # specFolderName = 'bd_grid_complex1logg1e4_noCH4_n=20_R=2000_fSed_test_fe[14]_mgsiO3[3.1-3.9]_na2s[4.6-2.8]_20260507_161919'
+    # ### SiO2 fsed, 1400K, logg5, kzz=1e7, n=20
+    # specConfigName =  f'1400K_fsed=2.0-3.5_Kzz=1e7+1e6_logg5_SiO2_withCH4_n=20' # codec outputname denote both kzz's
+    # # list primary spec folder first
+    # specFolderName = 'bd_v3_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_122547'
     # n = 20
-    # # n = 50
+
+    ### K1 waves SiO2 fsed, 1400K, logg5, kzz=3e9, n=50
+    # specConfigName =  f'1400K_fsed=1-1.25_Kzz=3e9+1e9_logg4.5_SiO2_withCH4_n=50'
+    # specConfigName =  f'1400K_fsed=1-1.25+1.30-1.50_Kzz=7e9+1e9_logg4.5_SiO2_withCH4_n=20'
+    # specConfigName =  f'1400K_fsed=1.3-1.5+2.0-2.4_Kzz=1e9+1e8_logg4.5_SiO2_withCH4_n=20'
+    # specConfigName =  f'1400K_fsed=1.3-1.5+2.0-2.4_Kzz=1e9_logg4.5_SiO2_withCH4_n=20'
+    # specConfigName =  f'1400K_fsed=2.0-2.4+3.0-3.4_Kzz=1e9_logg4.5_SiO2_withCH4_n=20'
+    # specConfigName = 'k1k2_test_1400K_multifsed_multiKzz_logg4.5_SiO2_withCH4_n=20'
+
+    ### K1 waves SiO2 fsed, 1400K, logg4.5, kzz=1e8 or 1e9 or 3e9, n=20
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=2.0-2.4_n=20_R=300_20260827_114323'
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=1.3-1.5_n=20_R=300_20260827_105407'
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e8_withCH4_fsed=1.0-1.50_n=20_R=300_20260827_134503'
+    specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.5_n=20_R=300_20260827_132306'
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=1.0-1.5_n=20_R=300_20260827_140013'
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-2.5_n=20_R=300_20260827_143121'
+    # specFolderName = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=1.0-1.5_n=20_R=300_20260827_140434'
+
+    ### K2 waves SiO2 fsed, 1400K, logg4.5, kzz=1e8 or 1e9 or 3e9, n=20
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=1.3-1.5_n=20_R=300_20260827_105407'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=2.0-2.4_n=20_R=300_20260827_114323'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e9_withCH4_fsed=3.0-3.4_n=20_R=300_20260827_123449'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=5e8_withCH4_fsed=3.0-3.6_n=20_R=300_20260827_125224'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=2.0-2.5_n=20_R=300_20260827_132306'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e7_withCH4_fsed=1.0-1.5_n=20_R=300_20260827_140013'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=3.0-3.5_n=20_R=300_20260827_132944'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.5-3.5_n=20_R=300_20260827_134956'
+    # specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-2.5_n=20_R=300_20260827_143121'
+    specFolderName_B = 'bd_v4_grid_Teff=1400K_kzz=1e6_withCH4_fsed=1.0-1.5_n=20_R=300_20260827_140434'
+
+    import re
+    def parse(name):
+        kzz, fsed = re.search(r"kzz=([\deE\+\-\.]+)_withCH4_fsed=([\d\.]+-[\d\.]+)", name).groups()
+        return kzz, fsed
+    kzz_a, fsed_a = parse(specFolderName)
+    kzz_b, fsed_b = parse(specFolderName_B)
+
+    specConfigName = f'k1k2_test_1400K_multiKzz({kzz_a}+{kzz_b})_fsed({fsed_a}+{fsed_b})_logg4.5_SiO2_withCH4_n=20'
+    n = 20
     
     runname = f'timeseries_{photrunName[:-3]}_{specConfigName}'
 
@@ -1379,12 +1416,16 @@ if __name__ == "__main__":
                               # EXCEPT the two mid-latitude bands flanking
                               # the poles (B1, B4)
 
-    # ===== STEP 1b: Load the second (B1/B4) spectra folder =====
-    # Folder B -> fsed=2-2.2, used ONLY for the B1/B4 pixels identified via
-    # specmask below. Point this at your actual fsed=2-2.2 grid directory.
+    # ======== STEP 1b: Load the second (B1/B4) spectra folder for K2 waves / midlat bands ==============
+    # Folder B -> used ONLY for the B1/B4 pixels (K2 waves midlat bands) identified via
+    # specmask below. Point this at your other fsed grid directory.
     
-    specFolderName_B = 'bd_grid_withCH4_fsed=3.0_n=20_R=300_20260729_223003'
+    # specFolderName_B = 'bd_grid_withCH4_fsed=3.0_n=20_R=300_20260729_223003'
     # specFolderName_B = 'bd_grid_withCH4_fsed=4.0_n=20_R=300_20260729_222047'
+    
+    ### SiO2 fsed, 1400K, logg5, kzz=1e7, n=20 
+    # specFolderName_B = 'bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-2.50_n=20_R=300_20260817_123221'
+    # specFolderName_B = 'bd_v3_grid_Teff=1400K_kzz=1e6_withCH4_fsed=2.0-3.5_n=20_R=300_20260817_135613'
 
     specpath_B = os.path.join(dir, specFolderName_B)
     specSummary_B = pickle.load(open(os.path.join(specpath_B, 'results_summary.pkl'), 'rb'))
@@ -1405,12 +1446,14 @@ if __name__ == "__main__":
     #   cloud_thickness: which fsed level within that folder (same
     #     digitized bin index 0..n-1 reused for both folders)
     codec.add_codec_type('feature_type', values=[1, 2],
-                        description='1=other regions (folder A, fsed~1-1.2); '
-                                     '2=B1/B4 mid-latitude bands (folder B, fsed~2-2.2)')
+                        description='1=other regions (folder A: %s);\n '%specFolderName +
+                                     '2=B1/B4 mid-latitude bands (folder B: %s)'%specFolderName_B)
     codec.add_codec_type('cloud_thickness', max_value=n, 
                         description='Cloud optical depth levels')
     codec.generate_combinations() # Generate all feature_type x cloud_thickness combinations
     
+    # ====================================================================================================
+
     # ===== STEP 2: Assign Spectra (per feature_type x cloud_thickness) =====
     for i in range(1, n + 1):
         codec.assign_spectra(codec.get_codec_id(feature_type=1, cloud_thickness=i),
@@ -1438,8 +1481,8 @@ if __name__ == "__main__":
     # ===== Process Time Series for All Inclination =====
     print("\n### Processing Time Series ###")
     
-    for inclin in results.keys():
-    # for inclin in ['0', '40']:
+    # for inclin in results.keys():
+    for inclin in ['0', '30', '60', '90']:
         results_ts = None
 
         # Build the static feature_type map for THIS inclination from its
@@ -1656,12 +1699,52 @@ inclin = '90'
 fig, ax, wave_centers, time_sel, variability = plot_variability_map(
     composite_spectra_ts,
     results[inclin]['time_array'],
-    wave_bin=0.01,
     t_min=0.0,
     t_max=10.0,
-    wave_range=(1.00, 5.10),
+    wave_range=(1.3, 6), wave_bin=0.03,
     inclin=inclin,
     cmap='RdBu_r',
     save_path=None,
-    figshape=(14, 2))
+    figshape=(14, 5), 
+    # vmin=-3, vmax=3,
+    )
+fig, ax, wave_centers, time_sel, variability = plot_variability_map(
+    composite_spectra_ts,
+    results[inclin]['time_array'],
+    t_min=0.0,
+    t_max=10.0,
+    # wave_range=(1.50, 5.20), wave_bin=0.02,
+    wave_range=(6, 12), wave_bin=0.03,
+    inclin=inclin,
+    cmap='RdBu_r',
+    save_path=None,
+    figshape=(14, 5), 
+    # vmin=-3, vmax=3,
+    )
 # %%
+inclin = '90' 
+fig, ax, wave_centers, time_sel, variability = plot_variability_map(
+    composite_spectra_ts,
+    results[inclin]['time_array'],
+    t_min=0.0,
+    t_max=60.0,
+    wave_range=(1.3, 6), wave_bin=0.03,
+    inclin=inclin,
+    cmap='RdBu_r',
+    save_path=None,
+    figshape=(14, 10), 
+    # vmin=-3, vmax=3,
+    )
+fig, ax, wave_centers, time_sel, variability = plot_variability_map(
+    composite_spectra_ts,
+    results[inclin]['time_array'],
+    t_min=0.0,
+    t_max=60.0,
+    # wave_range=(1.50, 5.20), wave_bin=0.02,
+    wave_range=(6, 12), wave_bin=0.03,
+    inclin=inclin,
+    cmap='RdBu_r',
+    save_path=None,
+    figshape=(14, 10), 
+    # vmin=-3, vmax=3,
+    )
