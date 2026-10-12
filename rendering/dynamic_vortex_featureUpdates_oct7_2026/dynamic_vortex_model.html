@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dynamic Polar Vortex Model</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root {
+    --bg:#090b10; --panel:#11151d; --panel2:#0d1017; --line:#232a38;
+    --txt:#d7dce6; --dim:#8590a5; --amber:#ffb454; --cyan:#7cc8ff; --green:#5fd38d; --red:#ff6b6b;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--txt);
+    font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--panel2); position:sticky; top:0; z-index:10; }
+  header h1 { margin:0; font-size:16px; color:var(--amber); font-weight:600; letter-spacing:.2px; }
+  header .status { margin-left:auto; color:var(--dim); font-variant-numeric:tabular-nums; }
+  header .status b { color:var(--txt); font-weight:600; }
+  button { background:#1a2030; color:var(--cyan); border:1px solid #31405c; border-radius:5px;
+    padding:5px 12px; cursor:pointer; font:inherit; }
+  button:hover { background:#222b40; }
+  button.primary { border-color:var(--amber); color:var(--amber); }
+  main { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; padding:12px 16px 24px; max-width:1400px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; min-width:0; }
+  .panel h2 { margin:0 0 8px; font-size:13px; color:var(--cyan); font-weight:600; display:flex; align-items:baseline; gap:8px; }
+  .panel h2 small { color:var(--dim); font-weight:400; }
+  #A1 .body { display:flex; justify-content:center; }
+  #viewCanvas { width:min(100%,470px); aspect-ratio:1; background:#000; border-radius:6px; display:block; }
+  .plot { width:100%; height:470px; }
+  #B .plot { height:300px; }
+  #B, #S, #PB { grid-column:1 / -1; }
+  .caption { color:var(--dim); font-size:11.5px; margin-top:6px; text-align:center; }
+  .boundrow { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; margin-top:6px; color:var(--dim); font-size:12px; }
+  .boundrow label { display:flex; align-items:center; gap:5px; }
+  input[type=number], input[type=text], select {
+    background:#0b0e15; color:var(--txt); border:1px solid #2b3447; border-radius:4px; padding:3px 6px; font:inherit; width:78px; }
+  input[type=text] { width:100%; }
+  select { width:auto; }
+  input[type=range] { width:100%; accent-color:var(--amber); }
+  .sliders { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 22px; }
+  .sl label { display:flex; justify-content:space-between; color:var(--dim); margin-bottom:2px; }
+  .sl output { color:var(--amber); font-variant-numeric:tabular-nums; }
+  details { border:1px solid var(--line); border-radius:6px; margin-bottom:8px; background:var(--panel2); }
+  summary { cursor:pointer; padding:6px 10px; color:var(--amber); font-weight:600; }
+  .pgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px 16px; padding:8px 12px 12px; }
+  .pgrid label { display:flex; flex-direction:column; gap:2px; color:var(--dim); font-size:12px; }
+  .pgrid label.chk { flex-direction:row; align-items:center; gap:7px; color:var(--txt); }
+  .pgrid .full { grid-column:1 / -1; }
+  .note { color:var(--dim); font-size:11.5px; padding:0 12px 10px; }
+  #VI { grid-column:1 / -1; }
+  #VI .scroll { overflow-x:auto; }
+  table.vt { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:12px; white-space:nowrap; }
+  table.vt th { color:var(--dim); font-weight:500; text-align:right; padding:3px 9px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); }
+  table.vt td { text-align:right; padding:3px 9px; border-bottom:1px solid #171c27; }
+  table.vt th:first-child, table.vt td:first-child { text-align:left; color:var(--amber); font-weight:600; }
+  table.vt td.ph { text-align:left; }
+  .ph-g { color:var(--green); } .ph-m { color:var(--txt); } .ph-d { color:var(--red); }
+  table.vt tr.grp th { text-align:center; color:var(--cyan); font-size:11px; border-bottom:none; padding-bottom:0; }
+  @media (max-width:900px) { main { grid-template-columns:minmax(0,1fr); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dynamic Polar Vortex Model</h1>
+  <button id="btnPlay" class="primary">Pause</button>
+  <button id="btnRestart">Restart</button>
+  <button id="btnSeed">New seed</button>
+  <button id="btnClearLC">Clear light curve</button>
+  <button id="btnExport" title="Download all current parameters as a JSON file">Export config</button>
+  <button id="btnImport" title="Load parameters from a previously exported JSON file">Import config</button>
+  <input type="file" id="fileImport" accept=".json,application/json" hidden>
+  <span id="cfgMsg" style="color:var(--dim);font-size:12px"></span>
+  <div class="status">t = <b id="stT">0.00</b> P &nbsp;|&nbsp; vortices: <b id="stN">0</b> &nbsp;|&nbsp; samples: <b id="stS">0</b> &nbsp;|&nbsp; seed: <b id="stSeed">1</b></div>
+</header>
+
+<main>
+  <!-- ── A1: map ─────────────────────────────────────────── -->
+  <section class="panel" id="A1">
+    <h2>A1 &middot; Atmosphere <small>orthographic view, i = <span id="a1Inc">0</span>&deg; (0&deg; = pole-on)</small></h2>
+    <div class="body"><canvas id="viewCanvas" width="700" height="700"></canvas></div>
+    <div class="boundrow" style="justify-content:center"><label><input type="checkbox" data-pid="freeze_rotation"> Fix longitude frame (atmosphere not rotating)</label></div>
+    <div class="caption">Cyan ring = 60&deg; latitude (polar region edge). Thin lines = lat/lon grid; brighter meridian = lon 0.</div>
+  </section>
+
+  <!-- ── A2: light curve ─────────────────────────────────── -->
+  <section class="panel" id="A2">
+    <h2>A2 &middot; Light curve <small>flux normalised to 1 &middot; time in rotation periods</small></h2>
+    <div id="lcPlot" class="plot"></div>
+    <div class="boundrow">
+      <label>t min <input type="number" data-pid="lc_tmin" step="any"></label>
+      <label>t max <input type="number" data-pid="lc_tmax" step="any"></label>
+      <label>flux min <input type="text" data-pid="lc_fmin" style="width:70px" placeholder="auto"></label>
+      <label>flux max <input type="text" data-pid="lc_fmax" style="width:70px" placeholder="auto"></label>
+      <label><input type="checkbox" data-pid="lc_follow"> follow (scroll window)</label>
+    </div>
+  </section>
+
+  <!-- ── B: periodogram ──────────────────────────────────── -->
+  <section class="panel" id="B">
+    <h2>B &middot; Periodogram <small>FFT power of the accumulated light curve &middot; period in rotation periods</small></h2>
+    <div id="pgPlot" class="plot"></div>
+    <div class="boundrow">
+      <label>period min <input type="number" data-pid="pg_pmin" step="any"></label>
+      <label>period max <input type="number" data-pid="pg_pmax" step="any"></label>
+      <label><input type="checkbox" data-pid="pg_log"> log power</label>
+      <span id="pgInfo"></span>
+    </div>
+  </section>
+
+  <!-- ── Live vortex information ─────────────────────────── -->
+  <section class="panel" id="VI">
+    <h2>Vortex information <small>live values of every vortex currently present (randomised at birth) &middot; angles in degrees, times in rotation periods</small></h2>
+    <div class="scroll"><table class="vt" id="vtable"></table></div>
+  </section>
+
+  <!-- ── Sliders ─────────────────────────────────────────── -->
+  <section class="panel" id="S">
+    <h2>Sliders</h2>
+    <div class="sliders" id="sliderBox"></div>
+  </section>
+
+  <!-- ── Parameter box ───────────────────────────────────── -->
+  <section class="panel" id="PB">
+    <h2>Parameters <small>all |parameters| from the requirements; ranges are drawn randomly per vortex at birth, so changes apply to newly spawned vortices (Restart to apply to all)</small></h2>
+    <div id="paramBox"></div>
+  </section>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════
+     ENGINE (no DOM): vortex lifecycle, spawning, rendering grid, FFT
+     ══════════════════════════════════════════════════════════ -->
+<script id="engine">
+'use strict';
+const D2R = Math.PI / 180, R2D = 180 / Math.PI, TWO_PI = 2 * Math.PI;
+
+// ---------- utilities ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function parseList(s) { return String(s).split(/[\s,;]+/).map(Number).filter(Number.isFinite); }
+function smooth01(s) { s = Math.min(1, Math.max(0, s)); return s * s * (3 - 2 * s); }
+
+// great-circle angular distance (deg)
+function angDist(lat1, lon1, lat2, lon2) {
+  const a = lat1 * D2R, b = lat2 * D2R, dl = (lon2 - lon1) * D2R;
+  let c = Math.sin(a) * Math.sin(b) + Math.cos(a) * Math.cos(b) * Math.cos(dl);
+  return Math.acos(Math.max(-1, Math.min(1, c))) * R2D;
+}
+// point at distance `dist` (deg) and bearing `brg` (rad) from (lat1,lon1) (deg). returns [lat,lon] deg
+function destination(lat1, lon1, dist, brg) {
+  const p1 = lat1 * D2R, l1 = lon1 * D2R, d = dist * D2R;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(brg));
+  const l2 = l1 + Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return [p2 * R2D, l2 * R2D];
+}
+// body frame (z = rotation axis) -> observer frame (x right, y up, z toward viewer)
+// rot (rad) = rotation phase added to longitude; inc (rad) = inclination (0 = pole-on)
+function bodyToObs(latDeg, lonDeg, rot, inc) {
+  const la = latDeg * D2R, lo = lonDeg * D2R + rot;
+  const x = Math.cos(la) * Math.cos(lo), y = Math.cos(la) * Math.sin(lo), z = Math.sin(la);
+  const ci = Math.cos(inc), si = Math.sin(inc);
+  return [x, y * ci + z * si, -y * si + z * ci];
+}
+
+// ---------- Vortex ----------
+class Vortex {
+  constructor(o) { Object.assign(this, o); }
+  // radius (deg) at time t (rotation periods)
+  radius(t) {
+    const age = t - this.tBirth;
+    if (age <= 0 || age >= this.Tlife) return 0;
+    const rem = this.Tlife - age;
+    let env = 1;
+    if (age < this.Ttrans) env = smooth01(age / this.Ttrans);
+    else if (rem < this.Ttrans) env = smooth01(rem / this.Ttrans);
+    const base = this.Rup - this.Asg + this.Asg * Math.sin(TWO_PI * age / this.Psg + this.phSg);
+    return env * base;
+  }
+  // [lat, lon] (deg) in the body frame at time t
+  position(t) {
+    const age = t - this.tBirth;
+    return destination(this.cLat, this.cLon, this.Rmig, this.th0 + TWO_PI * age / this.Pmig);
+  }
+}
+
+// ---------- VortexSim: spawning & tracking ----------
+class VortexSim {
+  constructor(P) { this.P = P; this.restart(); }
+
+  restart() {
+    const P = this.P;
+    this.rng = mulberry32(((P.seed | 0) ^ 0x5bd1e995) >>> 0);
+    this.vortices = [];
+    this.nextId = 0;
+    this.spawnFails = 0;
+    const n = Math.round(P.N_min);
+    for (let k = 0; k < n; k++) {
+      const v = this.spawn(0, !!P.stagger_initial);
+      if (!v) this.spawnFails++;
+    }
+  }
+
+  rand(a, b) { return a + (b - a) * this.rng(); }
+  range(lo, hi) { return this.rand(Math.min(lo, hi), Math.max(lo, hi)); }
+
+  // largest zone radius (deg) allowed at orbit-centre (lat,lon), from the latitude band and neighbours
+  zoneLimit(lat, lon) {
+    const P = this.P;
+    const rho = 90 - lat;
+    let zmax = Math.min(rho - (90 - P.Lat2), (90 - P.Lat1) - rho);
+    for (const u of this.vortices) {
+      const d = angDist(lat, lon, u.cLat, u.cLon);
+      zmax = Math.min(zmax, d - u.Z - P.R_stayaway);
+    }
+    return zmax;
+  }
+
+  // try to create one vortex at time t. returns the vortex or null if there is no room
+  spawn(t, stagger) {
+    const P = this.P;
+    const bigExists = this.vortices.some(v => v.radius(t) > P.R_big_thresh);
+    const capR = bigExists ? P.R_cap_new - 1e-3 : Infinity;      // rule 1
+    const lons = parseList(P.grid_lons), lats = parseList(P.grid_lats);
+
+    // candidate centres: favoured grid intersections (rule 2) and free random points
+    const gridC = [];
+    for (const la of lats) for (const lo of lons) gridC.push([la, ((lo % 360) + 360) % 360]);
+    for (let i = gridC.length - 1; i > 0; i--) { const j = Math.floor(this.rng() * (i + 1)); [gridC[i], gridC[j]] = [gridC[j], gridC[i]]; }
+    const randC = [];
+    for (let k = 0; k < 40; k++) randC.push([this.range(P.Lat1 + 1, P.Lat2 - 1), this.rng() * 360]);
+    const cands = this.rng() < P.p_grid ? gridC.concat(randC) : randC.concat(gridC);
+
+    for (const [cLat, cLon] of cands) {
+      let Rup = this.range(P.R_vor_upper_min, P.R_vor_upper_max);
+      Rup = Math.min(Rup, capR);
+      let ratio = this.range(P.R_mig_min, P.R_mig_max);
+      let Z = Rup * (1 + ratio);
+      const zmax = this.zoneLimit(cLat, cLon);
+      if (Z > zmax) {
+        ratio = Math.min(ratio, Math.min(P.R_mig_min, P.R_mig_max));      // first shrink the orbit…
+        Z = Rup * (1 + ratio);
+        if (Z > zmax) Rup = zmax / (1 + ratio);                           // …then the vortex
+      }
+      if (!(Rup >= Math.min(P.R_vor_upper_min, P.R_vor_upper_max) - 1e-9) || Rup <= 0) continue;
+      Rup = Math.min(Rup, capR);
+      Z = Rup * (1 + ratio);
+      if (Z > zmax + 1e-9) continue;
+
+      const Tlife = this.range(P.Tlife_min, P.Tlife_max);
+      const Ttrans = Math.min(this.range(P.Ttrans_min, P.Ttrans_max), Tlife / 2);
+      const Asg = Rup * this.range(P.Asg_frac_min, P.Asg_frac_max);
+      const Psg = Tlife * this.range(P.Psg_frac_min, P.Psg_frac_max);
+      const phSg = this.range(-Math.PI, Math.PI);
+      const flux = this.range(P.flux_vor_min, P.flux_vor_max);
+      const Pmig = Tlife * this.range(P.P_mig_frac_min, P.P_mig_frac_max);
+      const th0 = P.orbit_phase_same ? P.orbit_phase_value * D2R : this.rng() * TWO_PI;
+      const age0 = stagger ? this.rng() * 0.85 * Tlife : 0;
+      const v = new Vortex({ id: this.nextId++, tBirth: t - age0, Tlife, Ttrans, Rup, Asg, Psg, phSg, flux,
+                             cLat, cLon, Rmig: Rup * ratio, Pmig, th0, Z });
+      this.vortices.push(v);
+      return v;
+    }
+    return null;
+  }
+
+  // called at every sample time: remove dead vortices, keep N_min..N_max satisfied
+  manage(t) {
+    const P = this.P;
+    this.vortices = this.vortices.filter(v => t < v.tBirth + v.Tlife);
+    const nmin = Math.round(P.N_min), nmax = Math.round(P.N_max);
+    let guard = 0;
+    while (this.vortices.length < nmin && guard++ < 20) {
+      if (!this.spawn(t, false)) { this.spawnFails++; break; }
+    }
+    if (this.vortices.length < nmax) {
+      const p = 1 - Math.exp(-P.spawn_rate * P.dt_sample);
+      if (this.rng() < p) this.spawn(t, false);
+    }
+  }
+}
+
+// ---------- Pixel grid for one inclination (used for display and for flux) ----------
+class Grid {
+  constructor(N, incDeg, P) {
+    this.N = N; this.P = P; this.incDeg = incDeg; this.inc = incDeg * D2R;
+    const si = Math.sin(this.inc), ci = Math.cos(this.inc);
+    const idx = [];
+    for (let py = 0; py < N; py++) for (let px = 0; px < N; px++) {
+      const x = ((px + 0.5) / N) * 2 - 1, y = 1 - ((py + 0.5) / N) * 2;
+      if (x * x + y * y < 1) idx.push(py * N + px);
+    }
+    const M = idx.length;
+    this.M = M; this.idx = Int32Array.from(idx);
+    this.nx = new Float32Array(M); this.ny = new Float32Array(M); this.nz = new Float32Array(M);
+    this.b0 = new Float32Array(M); this.limb = new Float32Array(M); this.bl = new Float32Array(M);
+    const sinPolar = Math.sin(P.polar_lat * D2R);
+    let S0 = 0;
+    for (let k = 0; k < M; k++) {
+      const p = idx[k], px = p % N, py = (p / N) | 0;
+      const x = ((px + 0.5) / N) * 2 - 1, y = 1 - ((py + 0.5) / N) * 2;
+      const z = Math.sqrt(1 - x * x - y * y);
+      this.nx[k] = x; this.ny[k] = y; this.nz[k] = z;
+      const latSin = y * si + z * ci;                           // n · pole
+      const b0 = latSin >= sinPolar ? P.polar_bright : P.base_bright;
+      const limb = 1 - P.limb_u * (1 - z);
+      this.b0[k] = b0; this.limb[k] = limb; this.bl[k] = b0 * limb;
+      S0 += b0 * limb;
+    }
+    this.S0 = S0;                                               // vortex-free total flux
+  }
+
+  // sum of pixel values at time t; optionally writes per-pixel brightness into out (Float32Array(M))
+  evaluate(vortices, t, out, noRot) {
+    const P = this.P, rot = noRot ? 0 : TWO_PI * t;
+    let sum = this.S0;
+    if (out) out.set(this.bl);
+    const w = Math.max(P.edge_width, 1e-6);
+    const nx = this.nx, ny = this.ny, nz = this.nz, b0 = this.b0, limb = this.limb, M = this.M;
+    for (const v of vortices) {
+      const R = v.radius(t);
+      if (R <= 1e-6) continue;
+      const pos = v.position(t);
+      const c = bodyToObs(pos[0], pos[1], rot, this.inc);
+      const cosLim = Math.cos(Math.min(Math.PI, (R + w) * D2R));
+      const cx = c[0], cy = c[1], cz = c[2], fl = v.flux;
+      for (let i = 0; i < M; i++) {
+        const d = nx[i] * cx + ny[i] * cy + nz[i] * cz;
+        if (d < cosLim) continue;
+        const ang = Math.acos(d > 1 ? 1 : d) * R2D;
+        let cov = (R - ang) / w + 0.5;
+        if (cov <= 0) continue;
+        if (cov > 1) cov = 1;
+        const dl = cov * (fl - b0[i]) * limb[i];
+        sum += dl;
+        if (out) out[i] += dl;
+      }
+    }
+    return sum;
+  }
+}
+
+// ---------- FFT periodogram ----------
+function fftInPlace(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -TWO_PI / len, wr = Math.cos(ang), wi = Math.sin(ang), half = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < half; k++) {
+        const a = i + k, b = a + half;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+// y: uniformly sampled values, dt: sample spacing (periods). returns {period[], power[]} ascending period
+function periodogram(y, dt, pmin, pmax, padFactor) {
+  const N = y.length;
+  let mean = 0; for (let i = 0; i < N; i++) mean += y[i]; mean /= N;
+  let M = 1; while (M < N * Math.max(1, padFactor)) M <<= 1;
+  M = Math.min(M, 1 << 18);
+  const re = new Float64Array(M), im = new Float64Array(M);
+  let wsum = 0;
+  for (let i = 0; i < N && i < M; i++) {
+    const w = N > 1 ? 0.5 * (1 - Math.cos(TWO_PI * i / (N - 1))) : 1;
+    re[i] = (y[i] - mean) * w; wsum += w;
+  }
+  fftInPlace(re, im);
+  const period = [], power = [];
+  for (let k = M / 2; k >= 1; k--) {                 // k large -> short period first
+    const per = M * dt / k;
+    if (per < pmin) continue;
+    if (per > pmax) break;
+    const amp = 2 * Math.hypot(re[k], im[k]) / (wsum || 1);
+    period.push(per); power.push(amp * amp);
+  }
+  return { period, power, M, N };
+}
+
+// ---------- colormaps ----------
+const COLORMAPS = {
+  inferno: [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[250,193,39],[252,255,164]],
+  viridis: [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]],
+  plasma:  [[13,8,135],[126,3,168],[204,71,120],[248,149,64],[240,249,33]],
+  gray:    [[0,0,0],[255,255,255]],
+  hot:     [[0,0,0],[128,0,0],[255,0,0],[255,128,0],[255,255,0],[255,255,255]],
+};
+function makeLUT(name) {
+  const st = COLORMAPS[name] || COLORMAPS.inferno, lut = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const s = (i / 255) * (st.length - 1), k = Math.min(st.length - 2, Math.floor(s)), f = s - k;
+    for (let c = 0; c < 3; c++) lut[i * 3 + c] = Math.round(st[k][c] + f * (st[k + 1][c] - st[k][c]));
+  }
+  return lut;
+}
+
+if (typeof module !== 'undefined') module.exports = { VortexSim, Grid, Vortex, periodogram, angDist, parseList, destination, bodyToObs };
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP: parameters, UI, animation loop, plots
+     ══════════════════════════════════════════════════════════ -->
+<script id="app">
+// ---------- parameter definitions ----------
+// flag: 'restart' = needs a restart; 'grid' = rebuild pixel grids; 'reset' = also clears the light-curve history
+const GROUPS = {
+  sim:   'Simulation & spawning',
+  vor:   'Vortex properties (random ranges)',
+  orbit: 'Migration & spacing',
+  atm:   'Atmosphere',
+  view:  'Map view',
+  lc:    'Light curve & sampling',
+  pg:    'Periodogram',
+};
+const DEFS = [
+  // id, label, default, type, group, opts
+  ['seed','|seed|',1,'number','sim',{step:1,flag:'restart',desc:'Random seed (restarts the simulation)'}],
+  ['N_min','N min',6,'number','sim',{step:1,min:0,max:10,desc:'Minimum number of vortices'}],
+  ['N_max','N max',10,'number','sim',{step:1,min:1,max:10,desc:'Maximum number of vortices'}],
+  ['speed','Speed (periods / s)',1,'number','sim',{step:0.1,min:0.1,max:5}],
+  ['spawn_rate','Extra spawn rate (/period)',0.25,'number','sim',{step:0.05,min:0,desc:'Rate of optional spawns while N < N max (N min is always enforced)'}],
+  ['stagger_initial','Stagger initial ages',true,'bool','sim',{flag:'restart',desc:'Initial vortices start at random points of their lifetime instead of all at birth'}],
+  ['p_grid','P(favour grid spawn)',0.8,'number','sim',{step:0.05,min:0,max:1,desc:'Probability that the grid intersections are tried before free random locations'}],
+  ['grid_lons','Spawn longitudes (deg)','0,30,60,90,120,150,180,210,240,270,300,330','text','sim',{full:true,desc:'Rule 2 longitudes (150 added: it was missing in the original list)'}],
+  ['grid_lats','Spawn latitudes (deg)','65,70,75,80,85','text','sim',{full:true}],
+  ['R_big_thresh','R_big threshold (deg)',5,'number','sim',{step:0.5,desc:'Rule 1: if an existing vortex is currently bigger than this…'}],
+  ['R_cap_new','New-vortex R cap (deg)',5,'number','sim',{step:0.5,desc:'…new vortices are limited to R_vor_upper below this'}],
+
+  ['R_vor_upper_min','|R_vor_upper| min (deg)',2,'number','vor',{step:0.5,min:0.1}],
+  ['R_vor_upper_max','|R_vor_upper| max (deg)',6,'number','vor',{step:0.5,min:0.1,max:8,slider:'R_vor_upper max (deg)'}],
+  ['Tlife_min','|Tlife| min (P)',10,'number','vor',{step:1}],
+  ['Tlife_max','|Tlife| max (P)',40,'number','vor',{step:1,min:10,max:80,slider:'Tlife max (P)'}],
+  ['Ttrans_min','|Ttrans| min (P)',3,'number','vor',{step:0.5}],
+  ['Ttrans_max','|Ttrans| max (P)',5,'number','vor',{step:0.5}],
+  ['Psg_frac_min','|P_vor_shrinkgrow| min (× Tlife)',0.3,'number','vor',{step:0.05}],
+  ['Psg_frac_max','|P_vor_shrinkgrow| max (× Tlife)',0.8,'number','vor',{step:0.05}],
+  ['Asg_frac_min','|A_vor_shrinkgrow| min (× R_upper)',0.04,'number','vor',{step:0.01}],
+  ['Asg_frac_max','|A_vor_shrinkgrow| max (× R_upper)',0.15,'number','vor',{step:0.01}],
+  ['flux_vor_min','|flux_vor| min',1.0,'number','vor',{step:0.01}],
+  ['flux_vor_max','|flux_vor| max',1.1,'number','vor',{step:0.01,min:1.0,max:1.3,slider:'flux_vor max (contrast)'}],
+  ['edge_width','Vortex edge softness (deg)',1.0,'number','vor',{step:0.1,min:0.05,desc:'Anti-aliasing width of the spot edge; keep ≳ pixel size for smooth light curves'}],
+
+  ['R_mig_min','|R_migrate| min (× R_vor_upper)',0.3,'number','orbit',{step:0.1,desc:'Original 1–4 does not fit 6–10 non-overlapping orbits in the band; default 0.3–1.5'}],
+  ['R_mig_max','|R_migrate| max (× R_vor_upper)',1.5,'number','orbit',{step:0.1}],
+  ['P_mig_frac_min','|P_migrate| min (× Tlife)',0.1,'number','orbit',{step:0.05}],
+  ['P_mig_frac_max','|P_migrate| max (× Tlife)',0.4,'number','orbit',{step:0.05}],
+  ['Lat1','|Lat1| (deg)',60.5,'number','orbit',{step:0.5,desc:'Orbit footprints stay poleward of this latitude'}],
+  ['Lat2','|Lat2| (deg)',89.5,'number','orbit',{step:0.5,desc:'…and equatorward of this latitude'}],
+  ['R_stayaway','|R_stayaway| (deg)',3,'number','orbit',{step:0.5,min:0,max:8,slider:'R_stayaway (deg)',desc:'Minimum gap between vortex footprints (vortex + orbit)'}],
+  ['orbit_phase_same','|phase_vor_orbit| identical',false,'bool','orbit',{desc:'On: all orbits start at the same phase angle; off: randomised'}],
+  ['orbit_phase_value','Common orbit phase (deg)',0,'number','orbit',{step:15}],
+
+  ['polar_lat','Polar region edge (deg lat)',60,'number','atm',{step:1,flag:'reset'}],
+  ['polar_bright','Polar region brightness',1.0,'number','atm',{step:0.01,flag:'reset'}],
+  ['base_bright','Rest-of-sphere brightness',1.0,'number','atm',{step:0.01,flag:'reset'}],
+  ['limb_u','Limb darkening u (0 = off)',0,'number','atm',{step:0.05,min:0,max:1,flag:'reset'}],
+
+  ['inclination','|i| inclination (deg)',0,'number','view',{step:1,min:0,max:90,flag:'reset',slider:'Inclination i (deg)'}],
+  ['colormap','Colormap','inferno','select','view',{options:['inferno','viridis','plasma','gray','hot']}],
+  ['color_min','Colour min',0.98,'number','view',{step:0.01}],
+  ['color_max','Colour max',1.10,'number','view',{step:0.01}],
+  ['freeze_rotation','Fix longitude frame (stop rotation)',false,'bool','view',{desc:'Display only: freeze the rotation so the map is in the corotating frame and you can watch the spots evolve and migrate. The light curve still includes rotation.'}],
+  ['show_grid','Show lat/lon grid',true,'bool','view',{}],
+  ['grid_corotate','Grid co-rotates with atmosphere',true,'bool','view',{}],
+  ['grid_lat_step','Grid lat step (deg)',15,'number','view',{step:5,min:5}],
+  ['grid_lon_step','Grid lon step (deg)',30,'number','view',{step:5,min:5}],
+  ['show_labels','Label vortices on map (#id)',true,'bool','view',{desc:'Draw each vortex ID next to it, matching the information table'}],
+  ['show_orbits','Show orbit footprints',false,'bool','view',{desc:'Draw each vortex orbit circle (dashed)'}],
+  ['display_res','Display resolution (px)',360,'number','view',{step:20,min:120,max:700,flag:'grid'}],
+
+  ['dt_sample','Sample spacing dt (P)',0.05,'number','lc',{step:0.01,min:0.005,flag:'restart',desc:'Light-curve sampling interval; Nyquist period = 2·dt'}],
+  ['flux_res','Flux-grid resolution (px)',300,'number','lc',{step:20,min:60,max:700,flag:'reset',desc:'Pixel grid used for the flux sum'}],
+  ['norm_mode','Flux normalisation','baseline','select','lc',{options:['baseline','mean'],desc:'baseline = vortex-free flux at this inclination; mean = mean of the history'}],
+  ['lc_tmin','Light-curve t min',1,'number','lc',{step:'any',hidden:true}],
+  ['lc_tmax','Light-curve t max',50,'number','lc',{step:'any',hidden:true}],
+  ['lc_fmin','Light-curve flux min','','optnum','lc',{hidden:true}],
+  ['lc_fmax','Light-curve flux max','','optnum','lc',{hidden:true}],
+  ['lc_follow','Follow window',true,'bool','lc',{hidden:true}],
+
+  ['pg_pmin','Period min',1,'number','pg',{step:'any',hidden:true}],
+  ['pg_pmax','Period max',20,'number','pg',{step:'any',hidden:true}],
+  ['pg_log','Log power',false,'bool','pg',{hidden:true}],
+  ['pg_pad','Zero-padding factor',4,'number','pg',{step:1,min:1,max:8,desc:'Interpolates the spectrum (finer frequency grid)'}],
+  ['pg_maxN','Max samples in FFT',65536,'number','pg',{step:1024,min:256,max:131072,desc:'Uses the most recent samples if the run is longer'}],
+];
+
+const P = {};
+for (const d of DEFS) P[d[0]] = d[2];
+const DEF = Object.fromEntries(DEFS.map(d => [d[0], d]));
+
+// ---------- state ----------
+let sim = new VortexSim(P);
+let dispGrid = null, fluxGrid = null, offCanvas = null, offCtx = null, imgData = null, pixBuf = null, lut = makeLUT(P.colormap);
+let playing = true, simT = 0, nextSampleT = 0;
+let histT = [], histF = [], F0 = 1;
+let lastFrameTs = null, lcDirty = true, pgDirty = true;
+
+function rebuildGrids() {
+  dispGrid = new Grid(Math.round(P.display_res), P.inclination, P);
+  fluxGrid = new Grid(Math.round(P.flux_res), P.inclination, P);
+  F0 = fluxGrid.S0;
+  offCanvas = document.createElement('canvas');
+  offCanvas.width = offCanvas.height = dispGrid.N;
+  offCtx = offCanvas.getContext('2d');
+  imgData = offCtx.createImageData(dispGrid.N, dispGrid.N);
+  pixBuf = new Float32Array(dispGrid.M);
+  document.getElementById('a1Inc').textContent = P.inclination;
+}
+function resetHistory() { histT = []; histF = []; lcDirty = pgDirty = true; }
+function restartAll() {
+  sim = new VortexSim(P);
+  simT = 0; nextSampleT = 0;
+  resetHistory();
+  document.getElementById('stSeed').textContent = P.seed;
+}
+
+// ---------- parameter UI ----------
+function fmt(v, d) { return (typeof v === 'number') ? (Number.isInteger(v) ? String(v) : String(+v.toFixed(4))) : String(v); }
+
+function makeControl(def, forSlider) {
+  const [id, label, dflt, type, , o] = def;
+  let el;
+  if (type === 'bool') { el = document.createElement('input'); el.type = 'checkbox'; el.checked = P[id]; }
+  else if (type === 'select') {
+    el = document.createElement('select');
+    for (const op of o.options) { const e = document.createElement('option'); e.value = e.textContent = op; el.appendChild(e); }
+    el.value = P[id];
+  } else if (type === 'text' || type === 'optnum') { el = document.createElement('input'); el.type = 'text'; el.value = P[id] ?? ''; }
+  else {
+    el = document.createElement('input');
+    if (forSlider) { el.type = 'range'; el.min = o.min ?? 0; el.max = o.max ?? 10; el.step = o.step ?? 1; }
+    else { el.type = 'number'; el.step = o.step ?? 'any'; }
+    el.value = P[id];
+  }
+  el.dataset.pid = id;
+  return el;
+}
+
+function buildUI() {
+  // sliders
+  const sbox = document.getElementById('sliderBox');
+  const sliderIds = ['inclination','N_min','N_max','speed','R_vor_upper_max','Tlife_max','flux_vor_max','R_stayaway'];
+  for (const id of sliderIds) {
+    const d = DEF[id], o = d[5];
+    const wrap = document.createElement('div'); wrap.className = 'sl';
+    const lab = document.createElement('label');
+    const nm = document.createElement('span'); nm.textContent = o.slider || d[1].replace(/\|/g, '');
+    const out = document.createElement('output'); out.dataset.out = id; out.textContent = fmt(P[id]);
+    lab.append(nm, out);
+    wrap.append(lab, makeControl(d, true));
+    sbox.appendChild(wrap);
+  }
+  // parameter box
+  const pbox = document.getElementById('paramBox');
+  const byGroup = {};
+  for (const d of DEFS) { if (d[5].hidden) continue; (byGroup[d[4]] = byGroup[d[4]] || []).push(d); }
+  for (const g of Object.keys(GROUPS)) {
+    if (!byGroup[g]) continue;
+    const det = document.createElement('details'); det.open = (g === 'sim' || g === 'vor' || g === 'orbit');
+    const sum = document.createElement('summary'); sum.textContent = GROUPS[g]; det.appendChild(sum);
+    const grid = document.createElement('div'); grid.className = 'pgrid';
+    for (const d of byGroup[g]) {
+      const lab = document.createElement('label');
+      if (d[3] === 'bool') lab.className = 'chk';
+      if (d[5].full) lab.className += ' full';
+      if (d[5].desc) lab.title = d[5].desc;
+      const span = document.createElement('span'); span.textContent = d[1];
+      const ctl = makeControl(d, false);
+      if (d[3] === 'bool') lab.append(ctl, span); else lab.append(span, ctl);
+      grid.appendChild(lab);
+    }
+    det.appendChild(grid);
+    if (g === 'orbit') {
+      const n = document.createElement('div'); n.className = 'note';
+      n.textContent = 'Spawn location = orbit centre. A vortex\'s footprint (orbit radius + vortex radius) must lie inside Lat1–Lat2 and keep ≥ R_stayaway from every other footprint; if a draw does not fit, the orbit and then the vortex are shrunk (never below the minimum R_vor_upper).';
+      det.appendChild(n);
+    }
+    pbox.appendChild(det);
+  }
+  // bind every control carrying data-pid
+  document.querySelectorAll('[data-pid]').forEach(el => {
+    el.value !== undefined && syncElement(el, P[el.dataset.pid]);
+    const ev = (el.type === 'text') ? 'change' : (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
+    el.addEventListener(ev, () => onUserChange(el));
+  });
+}
+
+function syncElement(el, v) {
+  if (el.type === 'checkbox') el.checked = !!v; else el.value = (v === null || v === undefined) ? '' : v;
+}
+function setParam(id, val, source) {
+  P[id] = val;
+  document.querySelectorAll(`[data-pid="${id}"]`).forEach(el => { if (el !== source) syncElement(el, val); });
+  const out = document.querySelector(`[data-out="${id}"]`); if (out) out.textContent = fmt(val);
+}
+function onUserChange(el) {
+  const id = el.dataset.pid, d = DEF[id], type = d[3];
+  let v;
+  if (type === 'bool') v = el.checked;
+  else if (type === 'select' || type === 'text') v = el.value;
+  else if (type === 'optnum') { const x = parseFloat(el.value); v = Number.isFinite(x) ? x : null; }
+  else { v = parseFloat(el.value); if (!Number.isFinite(v)) return; }
+  setParam(id, v, el);
+  // coupled sliders
+  if (id === 'N_min' && P.N_min > P.N_max) setParam('N_max', P.N_min);
+  if (id === 'N_max' && P.N_max < P.N_min) setParam('N_min', P.N_max);
+  // side effects
+  const flag = d[5].flag;
+  if (id === 'colormap') lut = makeLUT(P.colormap);
+  if (flag === 'restart') restartAll();
+  else if (flag === 'grid') rebuildGrids();
+  else if (flag === 'reset') { rebuildGrids(); resetHistory(); }
+  if (id.startsWith('lc_')) lcDirty = true;
+  if (id.startsWith('pg_')) pgDirty = true;
+  if (id === 'norm_mode') lcDirty = pgDirty = true;
+}
+
+// ---------- rendering of the map ----------
+function drawMap() {
+  const N = dispGrid.N, t = simT;
+  dispGrid.evaluate(sim.vortices, t, pixBuf, P.freeze_rotation);
+  const data = imgData.data, idx = dispGrid.idx, M = dispGrid.M;
+  data.fill(0);
+  const cmin = P.color_min, span = (P.color_max - P.color_min) || 1;
+  for (let k = 0; k < M; k++) {
+    let s = (pixBuf[k] - cmin) / span; s = s < 0 ? 0 : s > 1 ? 1 : s;
+    const li = Math.round(s * 255) * 3, o = idx[k] * 4;
+    data[o] = lut[li]; data[o + 1] = lut[li + 1]; data[o + 2] = lut[li + 2]; data[o + 3] = 255;
+  }
+  offCtx.putImageData(imgData, 0, 0);
+
+  const cv = document.getElementById('viewCanvas'), ctx = cv.getContext('2d');
+  const W = cv.width, m = 14, r = W / 2 - m;
+  ctx.clearRect(0, 0, W, W);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, W);
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(offCanvas, m, m, W - 2 * m, W - 2 * m);
+  drawOverlay(ctx, W, r, t);
+}
+
+function drawOverlay(ctx, W, r, t) {
+  const inc = P.inclination * D2R, c = W / 2;
+  const rot = (P.grid_corotate && !P.freeze_rotation) ? TWO_PI * t : 0;
+  const proj = (lat, lon) => bodyToObs(lat, lon, rot, inc);
+  function strokeLine(pts, style, lw, dash) {
+    ctx.strokeStyle = style; ctx.lineWidth = lw; ctx.setLineDash(dash || []);
+    ctx.beginPath(); let pen = false;
+    for (const p of pts) {
+      if (p[2] <= 0) { pen = false; continue; }
+      const x = c + p[0] * r, y = c - p[1] * r;
+      if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (P.show_grid) {
+    const ls = Math.max(1, P.grid_lat_step), ms = Math.max(1, P.grid_lon_step);
+    for (let lat = -90 + ls; lat < 90; lat += ls) {
+      if (Math.abs(lat - P.polar_lat) < 1e-6) continue;
+      const pts = []; for (let lo = 0; lo <= 360; lo += 2) pts.push(proj(lat, lo));
+      strokeLine(pts, 'rgba(255,255,255,0.20)', 0.7);
+    }
+    for (let lon = 0; lon < 360; lon += ms) {
+      const pts = []; for (let la = -90; la <= 90; la += 2) pts.push(proj(la, lon));
+      strokeLine(pts, lon === 0 ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.20)', lon === 0 ? 1.1 : 0.7);
+    }
+  }
+  // polar region extent
+  { const pts = []; for (let lo = 0; lo <= 360; lo += 2) pts.push(proj(P.polar_lat, lo));
+    strokeLine(pts, 'rgba(124,200,255,0.95)', 1.6); }
+  // optional orbit footprints
+  if (P.show_orbits) {
+    for (const v of sim.vortices) {
+      const pts = []; for (let b = 0; b <= 360; b += 6) { const q = destination(v.cLat, v.cLon, v.Rmig, b * D2R); pts.push(proj(q[0], q[1])); }
+      strokeLine(pts, 'rgba(95,211,141,0.8)', 1, [4, 3]);
+      const pts2 = []; for (let b = 0; b <= 360; b += 6) { const q = destination(v.cLat, v.cLon, v.Z, b * D2R); pts2.push(proj(q[0], q[1])); }
+      strokeLine(pts2, 'rgba(95,211,141,0.35)', 0.8, [2, 4]);
+    }
+  }
+  // vortex labels
+  if (P.show_labels) {
+    const vRot = P.freeze_rotation ? 0 : TWO_PI * t;
+    ctx.font = '600 13px system-ui, sans-serif'; ctx.textBaseline = 'middle';
+    for (const v of sim.vortices) {
+      if (v.radius(t) <= 0.05) continue;
+      const q = v.position(t), o = bodyToObs(q[0], q[1], vRot, inc);
+      if (o[2] <= 0.02) continue;
+      const x = c + o[0] * r + 8, y = c - o[1] * r - 8, txt = '#' + v.id;
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(txt, x, y);
+      ctx.fillStyle = '#7cc8ff'; ctx.fillText(txt, x, y);
+    }
+  }
+  // limb
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(c, c, r, 0, TWO_PI); ctx.stroke();
+}
+
+// ---------- plots ----------
+const baseLayout = () => ({
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: '#0d1017',
+  font: { color: '#aab3c5', size: 11 },
+  margin: { l: 62, r: 14, t: 8, b: 44 },
+  xaxis: { gridcolor: '#1c2330', zerolinecolor: '#2a3344', linecolor: '#2a3344' },
+  yaxis: { gridcolor: '#1c2330', zerolinecolor: '#2a3344', linecolor: '#2a3344' },
+  showlegend: false,
+});
+const plotCfg = { responsive: true, displayModeBar: false };
+
+function normalisedFlux() {
+  if (!histF.length) return [];
+  let den = F0;
+  if (P.norm_mode === 'mean') { let s = 0; for (const f of histF) s += f; den = s / histF.length; }
+  return histF.map(f => f / den);
+}
+
+function updateLightCurve() {
+  const n = histT.length;
+  const dt = P.dt_sample;
+  let x0 = P.lc_tmin, x1 = P.lc_tmax;
+  const w = x1 - x0, tEnd = n ? histT[n - 1] : 0;
+  if (P.lc_follow && tEnd > x1) { x1 = tEnd; x0 = tEnd - w; }
+  let xs = [], ys = [];
+  if (n) {
+    const fl = normalisedFlux();
+    const i0 = Math.max(0, Math.floor((x0 - histT[0]) / dt) - 1);
+    const i1 = Math.min(n - 1, Math.ceil((x1 - histT[0]) / dt) + 1);
+    const stride = Math.max(1, Math.ceil((i1 - i0 + 1) / 1500));
+    for (let i = i0; i <= i1; i += stride) { xs.push(histT[i]); ys.push(fl[i]); }
+  }
+  const lay = baseLayout();
+  lay.xaxis.title = { text: 'Time (rotation periods)' };
+  lay.xaxis.range = [x0, x1];
+  lay.yaxis.title = { text: 'Normalised flux' };
+  lay.yaxis.tickformat = '.5~f';
+  if (P.lc_fmin !== null && P.lc_fmax !== null && P.lc_fmax > P.lc_fmin) lay.yaxis.range = [P.lc_fmin, P.lc_fmax];
+  else lay.yaxis.autorange = true;
+  Plotly.react('lcPlot', [{ x: xs, y: ys, type: 'scatter', mode: 'lines', line: { color: '#ffb454', width: 1.5 } }], lay, plotCfg);
+}
+
+function updatePeriodogram() {
+  const n = histF.length;
+  const el = document.getElementById('pgInfo');
+  const lay = baseLayout();
+  lay.xaxis.title = { text: 'Period (rotation periods)' };
+  lay.xaxis.range = [P.pg_pmin, P.pg_pmax];
+  lay.yaxis.title = { text: 'Power (rel. flux²)' };
+  lay.yaxis.type = P.pg_log ? 'log' : 'linear';
+  lay.yaxis.exponentformat = 'e';
+  lay.shapes = [{ type: 'line', x0: 1, x1: 1, yref: 'paper', y0: 0, y1: 1, line: { color: 'rgba(124,200,255,.55)', width: 1, dash: 'dot' } }];
+  lay.annotations = [{ x: 1, xref: 'x', y: 1, yref: 'paper', text: 'P = 1', showarrow: false, xanchor: 'left', font: { color: '#7cc8ff', size: 10 } }];
+  let trace = { x: [], y: [], type: 'scatter', mode: 'lines', line: { color: '#7cc8ff', width: 1.3 } };
+  if (n >= 32) {
+    const y = normalisedFlux();
+    const use = y.slice(Math.max(0, n - Math.round(P.pg_maxN)));
+    const pg = periodogram(use, P.dt_sample, P.pg_pmin, P.pg_pmax, P.pg_pad);
+    trace.x = pg.period; trace.y = P.pg_log ? pg.power.map(v => Math.max(v, 1e-30)) : pg.power;
+    el.textContent = `${pg.N} samples (T = ${(pg.N * P.dt_sample).toFixed(1)} P), FFT length ${pg.M}`;
+  } else el.textContent = 'collecting samples…';
+  Plotly.react('pgPlot', [trace], lay, plotCfg);
+}
+
+// ---------- animation loop ----------
+function frame(ts) {
+  const dtReal = lastFrameTs === null ? 0 : Math.min(0.1, (ts - lastFrameTs) / 1000);
+  lastFrameTs = ts;
+  if (playing) {
+    simT += P.speed * dtReal;
+    let guard = 0;
+    while (nextSampleT <= simT && guard++ < 400) {
+      sim.manage(nextSampleT);
+      histT.push(nextSampleT);
+      histF.push(fluxGrid.evaluate(sim.vortices, nextSampleT, null));
+      nextSampleT += P.dt_sample;
+      lcDirty = pgDirty = true;
+    }
+    if (histT.length > 200000) { histT.splice(0, 20000); histF.splice(0, 20000); }
+  }
+  drawMap();
+  document.getElementById('stT').textContent = simT.toFixed(2);
+  document.getElementById('stN').textContent = sim.vortices.length;
+  document.getElementById('stS').textContent = histT.length;
+  requestAnimationFrame(frame);
+}
+
+// ---------- init ----------
+buildUI();
+rebuildGrids();
+restartAll();
+document.getElementById('btnPlay').onclick = e => { playing = !playing; e.target.textContent = playing ? 'Pause' : 'Play'; };
+document.getElementById('btnRestart').onclick = () => restartAll();
+document.getElementById('btnSeed').onclick = () => { setParam('seed', Math.floor(Math.random() * 100000)); restartAll(); };
+document.getElementById('btnClearLC').onclick = () => resetHistory();
+// ---------- live vortex information table ----------
+function updateInfoTable() {
+  const t = simT, f = (v, d) => (+v).toFixed(d);
+  let h = '<thead><tr class="grp"><th></th><th></th><th></th><th colspan="4">size</th><th colspan="3">shrink / grow</th><th></th><th colspan="4">migration orbit</th><th colspan="2">current position</th></tr>' +
+    '<tr><th>ID</th><th>phase</th><th>age / T<sub>life</sub></th><th>R now</th><th>R<sub>vor_upper</sub></th><th>T<sub>trans</sub></th><th>flux</th>' +
+    '<th>P<sub>shrinkgrow</sub></th><th>A<sub>shrinkgrow</sub></th><th>phase (rad)</th><th>born at</th>' +
+    '<th>centre lat</th><th>centre lon</th><th>R<sub>migrate</sub></th><th>P<sub>migrate</sub></th><th>lat</th><th>lon</th></tr></thead><tbody>';
+  const vs = sim.vortices.slice().sort((a, b) => a.id - b.id);
+  for (const v of vs) {
+    const age = t - v.tBirth, rem = v.Tlife - age;
+    const ph = age < v.Ttrans ? ['growing', 'ph-g'] : rem < v.Ttrans ? ['dissipating', 'ph-d'] : ['mature', 'ph-m'];
+    const pos = v.position(t), lon = ((pos[1] % 360) + 360) % 360;
+    h += `<tr><td>#${v.id}</td><td class="ph ${ph[1]}">${ph[0]}</td><td>${f(Math.max(0, age), 1)} / ${f(v.Tlife, 1)}</td>` +
+      `<td>${f(v.radius(t), 2)}&deg;</td><td>${f(v.Rup, 2)}&deg;</td><td>${f(v.Ttrans, 2)}</td><td>${f(v.flux, 3)}</td>` +
+      `<td>${f(v.Psg, 1)}</td><td>${f(v.Asg, 2)}&deg;</td><td>${f(v.phSg, 2)}</td><td>${f(v.tBirth, 1)}</td>` +
+      `<td>${f(v.cLat, 1)}&deg;</td><td>${f(v.cLon, 1)}&deg;</td><td>${f(v.Rmig, 2)}&deg;</td><td>${f(v.Pmig, 1)}</td>` +
+      `<td>${f(pos[0], 1)}&deg;</td><td>${f(lon, 1)}&deg;</td></tr>`;
+  }
+  if (!vs.length) h += '<tr><td colspan="17" style="text-align:left;color:var(--dim)">no vortices</td></tr>';
+  document.getElementById('vtable').innerHTML = h + '</tbody>';
+}
+setInterval(updateInfoTable, 250);
+
+// ---------- config export / import ----------
+const CFG_FORMAT = 'dynamic_vortex_model_config';
+function cfgMsg(text, ok) {
+  const el = document.getElementById('cfgMsg');
+  el.textContent = text; el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  clearTimeout(cfgMsg.t); cfgMsg.t = setTimeout(() => { el.textContent = ''; }, 6000);
+}
+function exportConfig() {
+  const params = {};
+  for (const d of DEFS) params[d[0]] = (d[3] === 'optnum' && P[d[0]] === '') ? null : P[d[0]];
+  const obj = { format: CFG_FORMAT, version: 1, created: new Date().toISOString(), params };
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  a.href = url; a.download = `vortex_config_seed${P.seed}_${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  cfgMsg('Config exported', true);
+}
+function coerce(def, v) {
+  const type = def[3];
+  if (type === 'bool') return typeof v === 'boolean' ? v : undefined;
+  if (type === 'select') return def[5].options.includes(v) ? v : undefined;
+  if (type === 'text') return typeof v === 'string' ? v : undefined;
+  if (type === 'optnum') return (v === null || v === '') ? null : (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  return (typeof v === 'number' && Number.isFinite(v)) ? v : undefined;
+}
+function importConfig(text) {
+  let obj;
+  try { obj = JSON.parse(text); } catch (e) { cfgMsg('Import failed: not valid JSON', false); return; }
+  const src = (obj && obj.params && typeof obj.params === 'object') ? obj.params : obj;
+  if (!src || typeof src !== 'object') { cfgMsg('Import failed: no parameters found', false); return; }
+  let applied = 0, skipped = 0;
+  for (const [id, v] of Object.entries(src)) {
+    const def = DEF[id];
+    if (!def) { skipped++; continue; }
+    const c = coerce(def, v);
+    if (c === undefined) { skipped++; continue; }
+    setParam(id, c); applied++;
+  }
+  if (!applied) { cfgMsg('Import failed: no recognised parameters', false); return; }
+  if (P.N_min > P.N_max) setParam('N_max', P.N_min);
+  lut = makeLUT(P.colormap);
+  rebuildGrids();
+  restartAll();                       // apply the loaded configuration from t = 0
+  lcDirty = pgDirty = true;
+  cfgMsg(`Config loaded: ${applied} parameters` + (skipped ? `, ${skipped} ignored` : ''), true);
+}
+document.getElementById('btnExport').onclick = exportConfig;
+document.getElementById('btnImport').onclick = () => document.getElementById('fileImport').click();
+document.getElementById('fileImport').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => importConfig(String(rd.result));
+  rd.readAsText(f);
+  e.target.value = '';                // allow re-importing the same file
+});
+
+setInterval(() => { if (lcDirty) { lcDirty = false; updateLightCurve(); } }, 120);
+setInterval(() => { if (pgDirty) { pgDirty = false; updatePeriodogram(); } }, 500);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
