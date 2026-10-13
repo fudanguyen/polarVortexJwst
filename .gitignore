@@ -4,6 +4,7 @@
 spec_module/**/*.pkl
 spec_module/**/*.zip
 spec_module/**/*.h5
+spec_module/**/*.nc
 rendering/atm_renderer/output/*.h5
 rendering/atm_renderer/output/*.zip
 
