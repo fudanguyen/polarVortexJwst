@@ -1,2 +1,9 @@
 .DS_Store
 
+# Large generated result/data files
+spec_module/**/*.pkl
+spec_module/**/*.zip
+spec_module/**/*.h5
+rendering/atm_renderer/output/*.h5
+rendering/atm_renderer/output/*.zip
+
